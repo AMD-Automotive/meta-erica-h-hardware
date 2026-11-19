@@ -1,0 +1,145 @@
+// Copyright © Advanced Micro Devices, Inc., or its affiliates. All rights reserved.
+// Copyright (C) 2015-2024 Texas Instruments Incorporated - https://www.ti.com/
+// Modifications Copyright(C) 2026 Advanced Micro Devices, Inc. All rights reserved.
+// SPDX-License-Identifier: MIT AND BSD-2-Clause
+// Contributors: KC
+// Maintainer: KC
+// DP83867 constants copied from Linux include/dt-bindings/net/ti-dp83867.h
+// (GPL-2.0-only OR MIT); MIT selected. GPIO_ACTIVE_LOW copied from
+// include/dt-bindings/gpio/gpio.h (GPL-2.0 OR BSD-2-Clause); BSD-2-Clause selected.
+#define DP83867_RGMIIDCTL_250_PS        0x0
+#define DP83867_RGMIIDCTL_500_PS        0x1
+#define DP83867_RGMIIDCTL_750_PS        0x2
+#define DP83867_RGMIIDCTL_1_NS          0x3
+#define DP83867_RGMIIDCTL_1_25_NS       0x4
+#define DP83867_RGMIIDCTL_1_50_NS       0x5
+#define DP83867_RGMIIDCTL_1_75_NS       0x6
+#define DP83867_RGMIIDCTL_2_00_NS       0x7
+#define DP83867_RGMIIDCTL_2_25_NS       0x8
+#define DP83867_RGMIIDCTL_2_50_NS       0x9
+#define DP83867_RGMIIDCTL_2_75_NS       0xa
+#define DP83867_RGMIIDCTL_3_00_NS       0xb
+#define DP83867_RGMIIDCTL_3_25_NS       0xc
+#define DP83867_RGMIIDCTL_3_50_NS       0xd
+#define DP83867_RGMIIDCTL_3_75_NS       0xe
+#define DP83867_RGMIIDCTL_4_00_NS       0xf
+
+#define   DP83867_PHYCR_FIFO_DEPTH_4_B_NIB  0x01
+#define   GPIO_ACTIVE_LOW 1
+
+
+
+/ {
+        model = "RAVE2 Baseline - AMD Versal Gen 2";
+	compatible = "amd,versal2";
+	chosen {
+		stdout-path = "serial0:115200n8";
+		bootargs = "earlycon=pl011,mmio32,0xf1920000 console=ttyAMA0,115200";
+		xen_bootargs = "console=dtuart dtuart=serial0 dom0_mem=1000M dom0_max_vcpus=1 bootscrub=0 vwfi=native";
+		dom0_bootargs = "console=hvc0 earlycon=xen earlyprintk=xen clk_ignore_unused";
+	};
+
+	reserved-memory {
+		#address-cells = <0x2>;
+		#size-cells = <0x2>;
+		ranges;
+
+		/delete-node/ cma_reserved@800000000;
+		// Used to reserve memory for VCU
+		shared_dma_reserved: shared_dma_mem_region {
+			compatible = "shared-dma-pool";
+			reg = <0x8 0x0 0x1 0x40000000>;
+			linux,cma-default;
+			reusable;
+		};
+
+		//npu_dma_reserved: npup_dma_mem_region {
+		//	compatible = "shared-dma-pool";
+		//	size = <0x0 0x60000000>;
+		//	alloc-ranges = <0x500 0x0 0x0 0x80000000>;
+		//	no-map;
+		//};
+
+	};
+
+        aliases {
+		spi0 = "/axi/spi@f1010000";
+    spi1 = "/axi/spi@f19d0000";
+		nvmem0 = &eeprom;
+	};
+};
+
+&gpio0 {
+        status = "okay";
+};
+
+&mmi_dwc3 {
+        dr_mode = "host";
+        maximum-speed = "super-speed-plus";
+        dma-coherent;
+        snps,dis_u2_susphy_quirk;
+        snps,dis_u3_susphy_quirk;
+        snps,usb3_lpm_capable;
+};
+
+
+&gem1 { /* PMC_MIO_48, LPD_MIO0-11/24/25 */
+ /*       phy-handle = <&phy1>; */
+        phy-mode = "rgmii-id";
+ /* MDIO doesnt work from ospi - so fixed link for now */
+ /*       mdio: mdio { */
+ /*               #address-cells = <1>; */
+ /*               #size-cells = <0>; */
+ /*               phy1: ethernet-phy@0 {  */
+ /*                       #phy-cells = <1>; */
+ /*                       compatible = "ethernet-phy-id2000.a231"; */
+ /*                       reg = <0>; */
+ /*                       ti,rx-internal-delay = <DP83867_RGMIIDCTL_3_00_NS>; */
+ /*                       ti,tx-internal-delay = <DP83867_RGMIIDCTL_2_75_NS>; */
+ /*                       ti,fifo-depth = <1>; */
+ /*                       ti,dp83867-rxctrl-strap-quirk; */
+ /*                       reset-assert-us = <100>; */
+ /*                       reset-deassert-us = <280>; */
+ /*                       reset-gpios = <&gpio0 25 GPIO_ACTIVE_LOW>; */
+ /*               }; */
+ /*        }; */
+        fixed-link {
+                pause;
+                full-duplex;
+                speed = <1000>;
+        };
+};
+
+&mmi_10gbe { /* 10GbE direct to switch, no PHY */
+        phy-mode = "10gbase-r";
+        fixed-link {
+                speed = <10000>;
+                full-duplex;
+        };
+};
+
+
+&ospi { /* PMC_MIO0-10, MIO12 */
+        reset-names = "qspi";
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+	flash0: flash@0 {
+		compatible = "micron,mt35xu01gcba1g12", "micron,mt35xu01g", "jedec,spi-nor";
+		reg = <0>;
+		spi-tx-bus-width = <8>;
+		spi-rx-bus-width = <8>;
+		spi-max-frequency = <20000000>;
+		no-wp;
+		spi-nor,octal-dtr-enable;
+		boot,primary;
+	};
+};
+
+&i2c0 {
+        eeprom: eeprom@50 {
+                compatible = "atmel,24c128";
+                bootph-all;
+                reg = <0x50>;
+        };
+};

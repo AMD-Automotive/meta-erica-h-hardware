@@ -1,0 +1,71 @@
+bmcmake_metadata_xlnx: scope "chosen" node lookup to the processed domain
+
+xlnx_generate_cmake_metadata() is invoked with tgt_node pointing at the
+system device-tree root ("/"), not at a specific domain. It then
+recursively traverses the WHOLE tree (all sibling domains under
+/domains) looking for any node named "chosen", overwriting chosen_node
+on every match. The last match encountered in traversal order wins --
+independent of which domain/CPU is actually being built.
+
+On boards with multiple baremetal/RTOS domains that each carry their
+own "chosen" block (e.g. RAVE2's RPU_4_BM: stdout-path=serial1 vs.
+PMC_MB: stdout-path=serial0, both under the same /domains parent),
+this silently selects the wrong domain's console UART for
+STDIN_INSTANCE/STDOUT_BASEADDRESS in the generated bspconfig.h --
+confirmed via direct inspection of the generated StandaloneExample.cmake
+(STDIN_INSTANCE picked PMC_MB's UART0 instance for an RPU_4_BM build,
+because PMC_MB's "chosen" is the last one encountered under /domains).
+
+Fix: identify the domain actually being processed via the existing
+match_cpunode (resolved from options['args'][0], i.e. ESW_MACHINE) and
+prefer the "chosen" node whose parent domain's "cpus" phandle matches
+match_cpunode's enclosing CPU cluster. Falls back to the first "chosen"
+node encountered (previous de-facto behavior) if no domain match is
+found, to avoid regressing single-domain/non-domain configs.
+
+Upstream-Status: Pending
+Signed-off-by: ERICA build setup <erica@local>
+---
+--- a/lopper/assists/bmcmake_metadata_xlnx.py
++++ b/lopper/assists/bmcmake_metadata_xlnx.py
+@@ -387,11 +387,30 @@ def xlnx_generate_cmake_metadata(tgt_node, sdt, options):
+     node_list = []
+     chosen_node = ""
+     symbol_node = ""
++    # ERICA fix: prefer the "chosen" node belonging to the domain actually
++    # being processed (matched via the CPU cluster phandle), instead of
++    # blindly taking whichever "chosen"-named node is encountered LAST while
++    # recursively traversing the whole tree from tgt_node ("/"). Sibling
++    # domains under /domains can each carry their own chosen block (e.g.
++    # RPU_4_BM: serial1, PMC_MB: serial0) -- without this, STDIN_INSTANCE
++    # silently picks up whichever domain's chosen happens to appear last in
++    # tree order, independent of which domain/CPU is actually being built.
++    cluster_phandle = None
++    try:
++        cluster_phandle = getattr(bm_config.get_cpu_node(sdt, options).parent, "phandle", None)
++    except Exception:
++        pass
++    domain_chosen_node = ""
+     # Traverse the tree and find the nodes having status=ok property
+     for node in root_sub_nodes:
+         try:
+             if node.name == "chosen":
+-                chosen_node = node
++                if chosen_node == "":
++                    chosen_node = node
++                if cluster_phandle is not None:
++                    parent_cpus = node.parent.propval("cpus")
++                    if parent_cpus and parent_cpus != [''] and parent_cpus[0] == cluster_phandle:
++                        domain_chosen_node = node
+             if node.name == "__symbols__":
+                 symbol_node = node
+             status = node["status"].value
+@@ -399,6 +418,8 @@ def xlnx_generate_cmake_metadata(tgt_node, sdt, options):
+                 node_list.append(node)
+         except:
+            pass
++    if domain_chosen_node:
++        chosen_node = domain_chosen_node
+ 
+     src_path = options['args'][1]
+     command = options['args'][2]

@@ -1,0 +1,161 @@
+// Copyright © Advanced Micro Devices, Inc., or its affiliates. All rights reserved.
+// SPDX-License-Identifier: MIT
+// Contributors: LT, KC
+// Maintainer: LT
+/ {
+    model = "VEK385 ISP - AMD Versal Gen 2";
+	compatible = "amd,versal2";
+
+	chosen {
+		stdout-path = "serial0:115200n8";
+		bootargs = "earlycon=pl011,mmio32,0xf1930000 console=ttyAMA0,115200 cma=1000M";
+		xen_bootargs = "console=dtuart dtuart=serial1 dom0_mem=2500M dom0_max_vcpus=1 bootscrub=0 vwfi=native";
+		dom0_bootargs = "console=hvc0 earlycon=xen earlyprintk=xen clk_ignore_unused cma=1000M";
+	};
+
+	reserved-memory {
+		#address-cells = <0x2>;
+		#size-cells = <0x2>;
+		ranges;
+
+		/delete-node/ cma_reserved@800000000;
+		// Used to reserve memory for VCU
+		shared_dma_reserved: shared_dma_mem_region {
+			compatible = "shared-dma-pool";
+			reg = <0x8 0x0 0x1 0x40000000>;
+			//linux,cma-default;
+			reusable;
+		};
+
+		//npu_dma_reserved: npup_dma_mem_region {
+		//	compatible = "shared-dma-pool";
+		//	size = <0x0 0x60000000>;
+		//	alloc-ranges = <0x500 0x0 0x0 0x80000000>;
+		//	no-map;
+		//};
+
+	};
+        remoteproc@eba00000 {
+                compatible = "xlnx,versal-net-r52fss";
+                #address-cells = <0x2>;
+                #size-cells = <0x2>;
+                xlnx,cluster-mode = <0x0>;
+                ranges = <0x0 0x0 0x0 0xeba00000 0x0 0x10000 0x0 0x10000 0x0 0xeba10000 0x0 0x8000 0x0 0x18000 0x0 0xeba20000 0x0 0x8000>;
+
+                r52f@0 {
+                        compatible = "xlnx,versal2-r52f";
+                        power-domains = <&versal2_firmware 0x181100bf>,
+                         <&versal2_firmware 0x183180cb>,
+                         <&versal2_firmware 0x183180cc>,
+                         <&versal2_firmware 0x183180cd>;
+                        reg = <0x0 0x0 0x0 0x10000 0x0 0x10000 0x0 0x8000 0x0 0x18000 0x0 0x8000>;
+                        reg-names = "r52_0a_atcm_global@eba00000", "r52_0a_btcm_global@eba10000", "r52_0a_ctcm_global@eba20000";
+                        memory-region = <0x272 0x275 0x273 0x274 0x271>;
+                        mboxes = <&ipi_1_nobuf_to_ipi_2_nobuf 0x0>,
+                         <&ipi_1_nobuf_to_ipi_2_nobuf 0x1>;
+                        mbox-names = "tx", "rx";
+                };
+        };
+};
+
+&i2c0 {
+	status = "disabled";
+};
+
+&amba_pl {
+
+	axis_broadcastervcap_axis_broadcaster_0@0 {
+		status="disabled";
+	};
+
+	axis_broadcastervcap_axis_broadcaster_1@0 {
+		status="disabled";
+	};
+
+	axis_broadcastervcap_axis_broadcaster_2@0 {
+		status="disabled";
+	};
+
+	axis_broadcastervcap_axis_broadcaster_3@0 {
+		status="disabled";
+	};
+
+	axis_broadcastervcap_axis_broadcaster_4@0 {
+		status="disabled";
+	};
+
+	axis_broadcastervcap_axis_broadcaster_5@0 {
+		status="disabled";
+	};
+
+	telluride_drm {
+		compatible = "xlnx,aiarm";
+	};
+
+	ml_pre_process: ml-pre-process@b0010000 {
+		compatible = "xlnx,ml-pre-process-v2";
+		reg = <0x0 0xb0010000 0x0 0x00010000>,
+		      <0x0 0xb0000000 0x0 0x00010000>,
+		      <0x0 0xb0040000 0x0 0x00010000>,
+		      <0x0 0xb0020000 0x0 0x00010000>;
+		reg-names = "fvc_rd", "fvc_wr","svc_rd", "svc_wr";
+		interrupts = <17 0>,<18 0>,<19 0>,<20 0>;
+		interrupt-names = "fvc_rd","fvc_wr","svc_rd","svc_wr";
+		interrupt-parent = <&axi_intc_0>;
+	};
+};
+
+// Fix interrupts, something funky with SDT mapping
+&encoder {
+	interrupts = <0x8 0x2 0x4>;
+};
+&decoder {
+	interrupts = <0x7 0x2 0x4>;
+	memory-region = <&shared_dma_reserved>;
+};
+&aie_aperture_0 {
+	interrupts = <0x00 0xce 0x04 0x00 0xcf 0x04 0x00 0xd0 0x04>;
+};
+
+// ISP support for rproc
+&visp_mbox_rpu_6  {
+	memory-region = <&isp_mbox_buffer>;
+};
+&visp_mbox_rpu_7  {
+	memory-region = <&isp_mbox_buffer>;
+};
+&visp_mbox_rpu_8  {
+	memory-region = <&isp_mbox_buffer>;
+};
+
+&visp_ss_00  {
+	memory-region = <&rproc_D_0_6_calib_load>;
+	xlnx,name = "visp_ss_00";
+};
+&visp_ss_01  {
+	memory-region = <&rproc_E_0_8_calib_load>;
+	xlnx,name = "visp_ss_01";
+	xlnx,rpu = <0x8>;
+};
+
+&visp_ss_12  {
+	memory-region = <&rproc_D_1_7_calib_load>;
+	xlnx,name = "visp_ss_12";
+};
+&visp_ss_13  {
+	memory-region = <&rproc_E_0_8_calib_load>;
+	xlnx,name = "visp_ss_13";
+	xlnx,rpu = <0x8>;
+};
+
+&visp_ss_24  {
+	memory-region = <&rproc_E_0_8_calib_load>;
+	xlnx,name = "visp_ss_24";
+};
+&visp_ss_25  {
+	memory-region = <&rproc_E_0_8_calib_load>;
+	xlnx,name = "visp_ss_25";
+};
+
+
+

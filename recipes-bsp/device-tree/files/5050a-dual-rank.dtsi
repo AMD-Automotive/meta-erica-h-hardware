@@ -1,0 +1,11 @@
+// Copyright © Advanced Micro Devices, Inc., or its affiliates. All rights reserved.
+// SPDX-License-Identifier: MIT
+// Contributors: KC
+// Maintainer: KC
+&dwc3_0 { /* USB 2.0 host */
+	dr_mode = "host";
+	maximum-speed = "high-speed";
+	snps,dis_u2_susphy_quirk;
+	snps,dis_u3_susphy_quirk;
+	snps,usb3_lpm_capable;
+};

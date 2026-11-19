@@ -1,0 +1,128 @@
+// SPDX-License-Identifier: BSD-3-Clause OR GPL-2.0-or-later
+// Copyright © Advanced Micro Devices, Inc., or its affiliates. All rights reserved.
+// Contributors: JC
+// Maintainer: JC
+//
+// vek385-imx623-sentry-vid-dma-rd.dtsi
+//
+// Read-side (broadcaster source) bindings for the post-BD-rebuild
+// pipeline where v_frmbuf_rd has been retired and a READ-mode
+// axi4s_vid_dma takes its place.
+//
+// Topology (per VC, 4x VCs):
+//
+//   ISP DDR --> axi4s_vid_dma_rd (READ, NV12 1920x1536)
+//                      |
+//                      v
+//                axis_data_fifo
+//                      |
+//                      v
+//             axis_broadcaster (1 in, 4 out)
+//                /     |     |     \
+//          [csc]  [csc]  [csc]  [csc]
+//             |     |     |     |
+//          [WR0] [WR1] [WR2] [WR3]   axi4s_vid_dma WRITE-mode
+//             |     |     |     |
+//          /dev/videoN  ...
+//
+// The single READ-mode DMA per VC is the broadcaster source.  It
+// free-runs from a fixed DDR source frame written by the ISP.  The
+// erica-vid-dma driver detects the `sentry,read-source;` boolean
+// and:
+//   - skips V4L2/media/notifier registration entirely (no /dev/video)
+//   - programs WIDTH/HEIGHT/STRIDE/VIDFMT/PLANE* from DT defaults
+//   - starts the IP in AP_START | AUTO_RESTART (free-running)
+//   - exposes the existing `continuous` sysfs group so userspace can
+//     rebase the source frame at runtime (cont_plane{1..4}_addr,
+//     cont_width/height/stride/format) -- torn-latch protected.
+//
+// This file is meant to be `/include/`-ed from the main per-board
+// DTSI AFTER the BD has been rebuilt with READ-mode axi4s_vid_dma
+// instances replacing v_frmbuf_rd.  Until then, leave it commented
+// out in the main DTSI.
+//
+// IMPORTANT:  The four label names below
+//   sentry_vid_pre_proces_vc{0..3}_axi4s_vid_dma_rd
+// assume the new BD names the READ instances `axi4s_vid_dma_rd_0`.
+// If you instead let SDT auto-index (axi4s_vid_dma_2 per VC), update
+// the four `&...` references accordingly.
+//
+// Default source addresses below ASSUME the ISP writes its NV12
+// output to:
+//   VC0:  Y=0xb000_0000_0000  UV=0xb000_0000_1f80_0000+(W*H)
+//   ... (matches existing visp_ss DDR carveout layout)
+// REPLACE with the actual carveout addresses from your u-boot-bootenv
+// or visp DT once known.  Without sentry,read-source-plane1-addr the
+// driver leaves the IP idle (warned in dmesg) until userspace writes
+// to /sys/.../continuous/cont_plane1_addr and echoes 1 to continuous.
+//
+// VIDEO_FORMAT 4 = UYVY_420_SP (NV12 in DDR, UYVY 16-bit on AXIS).
+
+// VC0 ----------------------------------------------------------------
+&sentry_vid_pre_proces_vc0_axi4s_vid_dma_rd {
+	compatible = "sentry,erica-vid-dma", "xlnx,axi4s-vid-dma-1.0";
+	// status=disabled at boot; runtime overlay erica-vid-dma.dtbo
+	// flips this to "okay" when run_display_sentry.sh starts.
+	status = "disabled";
+	sentry,read-source;
+	sentry,read-source-width  = <1920>;
+	sentry,read-source-height = <1536>;
+	sentry,read-source-stride = <1920>;
+	sentry,read-source-format = <4>;	// EVDMA_FMT_UYVY_420_SP
+	// sentry,read-source-plane1-addr / plane2-addr:
+	// set at runtime via /sys/.../continuous/cont_plane{1,2}_addr,
+	// or hard-code DT values below once the ISP carveout is fixed:
+	// sentry,read-source-plane1-addr = /bits/ 64 <0xb0000000>;
+	// sentry,read-source-plane2-addr = /bits/ 64 <0xb01f9000>;
+};
+
+// VC1 ----------------------------------------------------------------
+&sentry_vid_pre_proces_vc1_axi4s_vid_dma_rd {
+	compatible = "sentry,erica-vid-dma", "xlnx,axi4s-vid-dma-1.0";
+	status = "disabled";
+	sentry,read-source;
+	sentry,read-source-width  = <1920>;
+	sentry,read-source-height = <1536>;
+	sentry,read-source-stride = <1920>;
+	sentry,read-source-format = <4>;
+};
+
+// VC2 ----------------------------------------------------------------
+&sentry_vid_pre_proces_vc2_axi4s_vid_dma_rd {
+	compatible = "sentry,erica-vid-dma", "xlnx,axi4s-vid-dma-1.0";
+	status = "disabled";
+	sentry,read-source;
+	sentry,read-source-width  = <1920>;
+	sentry,read-source-height = <1536>;
+	sentry,read-source-stride = <1920>;
+	sentry,read-source-format = <4>;
+};
+
+// VC3 ----------------------------------------------------------------
+&sentry_vid_pre_proces_vc3_axi4s_vid_dma_rd {
+	compatible = "sentry,erica-vid-dma", "xlnx,axi4s-vid-dma-1.0";
+	status = "disabled";
+	sentry,read-source;
+	sentry,read-source-width  = <1920>;
+	sentry,read-source-height = <1536>;
+	sentry,read-source-stride = <1920>;
+	sentry,read-source-format = <4>;
+};
+
+// =====================================================================
+// FINN feeder RD DMA (b000c) removed: the FINN subsystem is no longer
+// in the block design, so the SDT does not define its label.
+
+// =====================================================================
+// WRITE-side cleanup -- drop the now-stale sentry,frmbuf-rd phandles.
+//
+// Once the BD no longer instantiates v_frmbuf_rd, the &sentry_vid_pre_
+// proces_vcN_v_frmbuf_rd_0 labels in the main DTSI no longer resolve
+// and dtc will fail.  The simplest fix is to delete the four
+// status="disabled" stanzas AND the eight `sentry,frmbuf-rd = <...>`
+// property assignments from the main DTSI.  The four WRITE DMAs
+// continue to bind via the existing
+//   compatible = "sentry,erica-vid-dma", "xlnx,axi4s-vid-dma-1.0";
+// override.  No upstream-claim phandle is needed -- the broadcaster
+// source DMA above runs autonomously.
+// =====================================================================

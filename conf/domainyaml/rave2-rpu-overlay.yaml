@@ -1,0 +1,17 @@
+domains:
+  # Mirrors VEK385's vek385-rpu-overlay.yaml: board-specific console wiring
+  # for the baremetal/PMC domains that have no OpenAMP/libmetal-relation
+  # file of their own to carry a "chosen" block. RPU_2_Zephyr's chosen
+  # lives in rave2-openamp-overlay.yaml instead, matching how VEK385 keeps
+  # RPU_Zephyr's chosen in its generic openamp-overlay (not in rpu-overlay).
+  RPU_4_BM:
+    compatible: openamp,domain-v1
+    chosen:
+      stdout-path: "serial1:115200n8"
+      bootargs: "earlycon=pl011,mmio32,0xf1930000 console=ttyAMA1,115200"
+
+  PMC_MB:
+    compatible: openamp,domain-v1
+    chosen:
+      stdout-path: "serial0:115200n8"
+      bootargs: "earlycon=pl011,mmio32,0xf1920000 console=ttyAMA0,115200"

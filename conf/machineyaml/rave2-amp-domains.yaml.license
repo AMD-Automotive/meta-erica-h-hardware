@@ -1,0 +1,8 @@
+Copyright © Advanced Micro Devices, Inc., or its affiliates. All rights reserved.
+SPDX-License-Identifier: MIT
+Contributors: Uwe Gertheinrich
+Maintainer: KC
+# Shared --template for gen-machineconf: declares the R52_2/R52_4 domain-file
+# chain + CONFIG_YOCTO_BBMC_CORTEXR52_{2,4}_BAREMETAL kconfig, reused by both
+# rave2-baseline-2026-1 and rave2-ecp-2026-1 (--hw-description/--machine-name
+# stay as CLI args in import_sdt_rave2.sh, not duplicated here).

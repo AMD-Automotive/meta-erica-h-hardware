@@ -1,0 +1,465 @@
+// Copyright © Advanced Micro Devices, Inc., or its affiliates. All rights reserved.
+// SPDX-License-Identifier: MIT
+// Contributors: LT, KC
+// Maintainer: LT
+/ {
+    model = "VEK385 YUV - AMD Versal Gen 2";
+	compatible = "amd,versal2";
+
+	chosen {
+		stdout-path = "serial0:115200n8";
+		bootargs = "earlycon=pl011,mmio32,0xf1930000 console=ttyAMA0,115200 cma=1000M";
+		xen_bootargs = "console=dtuart dtuart=serial1 dom0_mem=2500M dom0_max_vcpus=1 bootscrub=0 vwfi=native";
+		dom0_bootargs = "console=hvc0 earlycon=xen earlyprintk=xen clk_ignore_unused cma=1000M";
+	};
+
+	/delete-node/ vcap_vcap_pipe2_mipi_csi2_rx_subsyst_0;
+	/delete-node/ vcap_display_v_proc_ss_scale;
+	/delete-node/ vcap_portsdisplay_v_proc_ss_scale;
+	/delete-node/ vcap_portdisplay_v_proc_ss_scale;
+	/delete-node/ display_v_frmbuf_wr_0display_v_proc_ss_scale;
+	/delete-node/ display_v_proc_ss_csc;
+	/delete-node/ display_v_proc_ss_csc_csc;
+	/delete-node/ ml_pre_process_pipe0_v_proc_ss_csc_csc;
+	/delete-node/ ml_pre_process_pipe1_v_proc_ss_csc_csc;
+	/delete-node/ scaler_portsdisplay_v_proc_ss_scale;
+	
+	
+	reserved-memory {
+		#address-cells = <0x2>;
+		#size-cells = <0x2>;
+		ranges;
+
+		/delete-node/ cma_reserved@800000000;
+		// Used to reserve memory for VCU
+		shared_dma_reserved: shared_dma_mem_region {
+			compatible = "shared-dma-pool";
+			reg = <0x8 0x0 0x1 0x40000000>;
+			//linux,cma-default;
+			reusable;
+		};
+
+		//npu_dma_reserved: npup_dma_mem_region {
+		//	compatible = "shared-dma-pool";
+		//	size = <0x0 0x60000000>;
+		//	alloc-ranges = <0x500 0x0 0x0 0x80000000>;
+		//	no-map;
+		//};
+
+	};
+	
+};
+
+&i2c0 {
+	status = "okay";
+};
+
+&amba_pl {
+
+	telluride_drm {
+		compatible = "xlnx,aiarm";
+	};
+
+	ml_pre_process: ml-pre-process@b00c0000 {
+		compatible = "xlnx,ml-pre-process";
+		reg = <0xb00c0000 0x1000>;
+		reg-names = "pipe0_fbwr";
+		interrupts = <0x0c 0x02>,<0x0e 0x02>,<0x10 0x02>;
+		interrupt-names = "pipe0_fbwr","pipe1_fbwr","display_fbwr";
+		interrupt-parent = <&axi_intc_0>;
+	};
+
+	// Using a flexible dummy sensor driver for CSI-2 connection
+	vid_capture_dummy_src_0: dummy_src_0@0 {
+			compatible = "xlnx,dummy_src";
+			clock-names = "ap_clk";
+			clocks = <&misc_clk_0>;
+			xlnx,max-height = <2160>;
+			xlnx,max-width = <8192>;
+			xlnx,ppc = <4>;
+			xlnx,s-axi-ctrl-addr-width = <8>;
+			xlnx,s-axi-ctrl-data-width = <32>;
+
+			ports {
+					#address-cells = <1>;
+					#size-cells = <0>;
+					port@0 {
+							reg = <0>;
+
+							xlnx,video-format = <0>;
+							xlnx,video-width = <8>;
+
+							dummy_src0_out: endpoint {
+									remote-endpoint = <&csiss0_in>;
+							};
+					};
+			};
+	};
+
+	vid_capture_dummy_src_1: dummy_src_1@0 {
+			compatible = "xlnx,dummy_src";
+			clock-names = "ap_clk";
+			clocks = <&misc_clk_0>;
+			xlnx,max-height = <2160>;
+			xlnx,max-width = <8192>;
+			xlnx,ppc = <4>;
+			xlnx,s-axi-ctrl-addr-width = <8>; 
+			xlnx,s-axi-ctrl-data-width = <32>;
+
+			ports {
+					#address-cells = <1>;
+					#size-cells = <0>;
+					port@0 {
+							reg = <0>;
+
+							xlnx,video-format = <0>;
+							xlnx,video-width = <8>;
+
+							dummy_src1_out: endpoint {
+									remote-endpoint = <&csiss1_in>;
+							};
+					};
+			};
+	};
+
+	vid_capture_dummy_src_2: dummy_src_2@0 {
+			compatible = "xlnx,dummy_src";
+			clock-names = "ap_clk";
+			clocks = <&misc_clk_0>;
+			xlnx,max-height = <2160>;
+			xlnx,max-width = <8192>;
+			xlnx,ppc = <4>;
+			xlnx,s-axi-ctrl-addr-width = <8>; 
+			xlnx,s-axi-ctrl-data-width = <32>;
+
+			ports {
+					#address-cells = <1>;
+					#size-cells = <0>;
+					port@0 {
+							reg = <0>;
+
+							xlnx,video-format = <0>;
+							xlnx,video-width = <8>;
+
+							dummy_src2_out: endpoint {
+									remote-endpoint = <&csiss2_in>;
+							};
+					};
+			};
+	};
+
+	// This is to enable the /dev/videoX V4L2 interfaces
+	axi_video_cap0 {
+		compatible = "xlnx,video";
+		dmas = <&vcap_pipe0_v_frmbuf_wr_0 0>,<&vcap_pipe0_v_frmbuf_wr_1 0>;
+		dma-names = "port0","port1";
+
+		ports {
+				#address-cells = <1>;
+				#size-cells = <0>;
+				port@0 {
+						reg = <0>;
+						direction = "input";
+						vcap0_in0: endpoint {
+								remote-endpoint = <&switch0_out0>;
+						};
+				};
+				port@1 {
+						reg = <1>;
+						direction = "input";
+						vcap0_in1: endpoint {
+								remote-endpoint = <&switch0_out1>;
+						};
+				};
+		};
+	};
+
+	axi_video_cap1 {
+		compatible = "xlnx,video";
+		dmas = <&vcap_pipe1_v_frmbuf_wr_0 0>,<&vcap_pipe1_v_frmbuf_wr_1 0>;
+		dma-names = "port0","port1";
+
+		ports {
+				#address-cells = <1>;
+				#size-cells = <0>;
+				port@0 {
+						reg = <0>;
+						direction = "input";
+						vcap1_in0: endpoint {
+								remote-endpoint = <&switch1_out0>;
+						};
+				};
+				port@1 {
+						reg = <1>;
+						direction = "input";
+						vcap1_in1: endpoint {
+								remote-endpoint = <&switch1_out1>;
+						};
+				};
+		};
+	};
+
+	axi_video_cap2 {
+		compatible = "xlnx,video";
+		dmas = <&vcap_pipe2_v_frmbuf_wr_0 0>;
+		dma-names = "port0";
+
+		ports {
+				#address-cells = <1>;
+				#size-cells = <0>;
+				port@0 {
+						reg = <0>;
+						direction = "input";
+						vcap2_in0: endpoint {
+								remote-endpoint = <&csiss2_out>;
+						};
+				};
+		};
+	};
+
+};
+
+// Set the CSI-2 RX to use YUV422 video format
+&vcap_pipe0_mipi_csi2_rx_subsyst_0 {
+	xlnx,csi-pxl-format = <0x1e>; //YUV
+	video-reset-gpios = <&axi_gpio_rst 0x4 0x1>;
+	ports {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		port@0 {
+			reg = <0>;
+
+			xlnx,video-format = <0>;
+			xlnx,video-width = <8>;
+
+			csiss0_in: endpoint {
+				data-lanes = <1 2 3 4>;
+				remote-endpoint = <&dummy_src0_out>;
+			};
+		};
+		port@1 {
+			reg = <1>;
+
+			xlnx,video-format = <0>;
+			xlnx,video-width = <8>;
+
+			csiss0_out: endpoint {
+				remote-endpoint = <&switch0_in0>;
+			};
+		};
+	};
+
+};
+
+
+// SDT is not assign clock for some reason
+&vcap_pipe0_axis_switch_0 {
+	//compatible = "xlnx,dummy_switch-1.0"; // Dummy Option
+	clock-names = "aclk";
+    clocks = <&misc_clk_0>;
+	ports {
+	#address-cells = <1>;
+	#size-cells = <0>;
+		port@0 {
+			reg = <0>;
+			xlnx,video-format = <0>;
+			xlnx,video-width = <8>;
+			switch0_in0: endpoint {
+				remote-endpoint = <&csiss0_out>;
+			};
+		};
+		port@1 {
+			reg = <1>;
+			xlnx,video-format = <0>;
+			xlnx,video-width = <8>;
+			switch0_out0: endpoint {
+				remote-endpoint = <&vcap0_in0>;
+			};
+		};
+		port@2 {
+			reg = <2>;
+			xlnx,video-format = <0>;
+			xlnx,video-width = <8>;
+			switch0_out1: endpoint {
+				remote-endpoint = <&vcap0_in1>;
+			};
+		};
+	};
+
+};
+
+&vcap_pipe1_mipi_csi2_rx_subsyst_0 {
+	xlnx,csi-pxl-format = <0x1e>; //YUV
+	video-reset-gpios = <&axi_gpio_rst 0x7 0x1>;
+	ports {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		port@0 {
+			reg = <0>;
+
+			xlnx,video-format = <0>;
+			xlnx,video-width = <8>;
+
+			csiss1_in: endpoint {
+				data-lanes = <1 2 3 4>;
+				remote-endpoint = <&dummy_src1_out>;
+			};
+		};
+		port@1 {
+			reg = <1>;
+
+			xlnx,video-format = <0>;
+			xlnx,video-width = <8>;
+
+			csiss1_out: endpoint {
+				remote-endpoint = <&switch1_in0>;
+			};
+		};
+	};
+
+};
+
+&vcap_pipe1_axis_switch_0 {
+	//compatible = "xlnx,dummy_switch-1.0"; // Dummy Option
+	clock-names = "aclk";
+    clocks = <&misc_clk_0>;
+	ports {
+	#address-cells = <1>;
+	#size-cells = <0>;
+		port@0 {
+			reg = <0>;
+			xlnx,video-format = <0>;
+			xlnx,video-width = <8>;
+			switch1_in0: endpoint {
+				remote-endpoint = <&csiss1_out>;
+			};
+		};
+		port@1 {
+			reg = <1>;
+			xlnx,video-format = <0>;
+			xlnx,video-width = <8>;
+			switch1_out0: endpoint {
+				remote-endpoint = <&vcap1_in0>;
+			};
+		};
+		port@2 {
+			reg = <2>;
+			xlnx,video-format = <0>;
+			xlnx,video-width = <8>;
+			switch1_out1: endpoint {
+				remote-endpoint = <&vcap1_in1>;
+			};
+		};
+	};
+
+};
+
+&vcap_pipe2_mipi_csi2_rx_subsyst_0 {
+	xlnx,csi-pxl-format = <0x1e>; //YUV
+	video-reset-gpios = <&axi_gpio_rst 0xA 0x1>;
+	ports {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		port@0 {
+			reg = <0>;
+
+			xlnx,video-format = <0>;
+			xlnx,video-width = <8>;
+
+			csiss2_in: endpoint {
+				data-lanes = <1 2 3 4>;
+				remote-endpoint = <&dummy_src2_out>;
+			};
+		};
+		port@1 {
+			reg = <1>;
+
+			xlnx,video-format = <0>;
+			xlnx,video-width = <8>;
+
+			csiss2_out: endpoint {
+				remote-endpoint = <&vcap2_in0>;
+			};
+		};
+	};
+
+};
+
+&ml_pre_process_pipe0_v_proc_ss_scale {
+	status="disabled";
+};
+
+&ml_pre_process_pipe1_v_proc_ss_scale {
+	status="disabled";
+};
+
+&ml_pre_process_pipe0_v_proc_ss_csc  {
+	status="disabled";
+};
+
+&ml_pre_process_pipe1_v_proc_ss_csc  {
+	status="disabled";
+};
+
+&ml_pre_process_pipe0_v_frmbuf_wr_0 {
+	status="disabled";
+};
+
+&ml_pre_process_pipe1_v_frmbuf_wr_0 {
+	status="disabled";
+};
+
+&display_v_frmbuf_wr_0 {
+	status="disabled";
+};
+
+&ml_pre_process_pipe0_v_frmbuf_rd_0 {
+	status="disabled";
+};
+
+&ml_pre_process_pipe1_v_frmbuf_rd_0 {
+	status="disabled";
+};
+
+&display_v_frmbuf_rd_0 {
+	status="disabled";
+};
+
+&ml_pre_process_pipe0_v_proc_ss_scale  {
+	status="disabled";
+};
+ 
+&ml_pre_process_pipe1_v_proc_ss_scale  {
+	status="disabled";
+};
+
+&display_v_proc_ss_scale  {
+	status="disabled";
+};
+
+&v_pl_dispdisplay_v_proc_ss_csc  {
+	status="disabled";
+};
+
+&v_pl_dispml_pre_process_pipe0_v_proc_ss_csc  {
+	status="disabled";
+};
+
+&v_pl_dispml_pre_process_pipe1_v_proc_ss_csc  {
+	status="disabled";
+};
+
+// Fix interrupts, something funky with SDT mapping
+&encoder {
+	interrupts = <0x8 0x2 0x4>;
+};
+&decoder {
+	interrupts = <0x7 0x2 0x4>;
+	memory-region = <&shared_dma_reserved>;
+};
+&aie_aperture_0 {
+	interrupts = <0x00 0xce 0x04 0x00 0xcf 0x04 0x00 0xd0 0x04>;
+};

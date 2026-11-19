@@ -1,0 +1,36 @@
+args:
+    # Relative to tmpsdt/ (gen-machineconf's cwd, same as --template below) --
+    # NOT ${LAYER_PATH_meta-versal-hexcam-hardware}: that bitbake-datastore
+    # expansion is unreliable in gen-machineconf's early Kconfig-generation
+    # pass (GenDTSWithYaml() in sdt_flow.py reads args.domain_file before
+    # ExpandFilePath() is guaranteed to have run -- confirmed via a patched
+    # traceback, "[ERROR] Error in GetDomainName: ... ${LAYER_PATH_...}"
+    # literal, unexpanded, raised as a real file-not-found). A plain relative
+    # path needs no expansion at all and works at every stage.
+    - --domain-file ../conf/domainyaml/rave2-rpu-base-overlay.yaml \
+                    ../conf/domainyaml/rave2-rpu-overlay.yaml \
+                    ../conf/domainyaml/rave2-openamp-overlay.yaml \
+                    ../conf/domainyaml/rave2-libmetal-canfd-overlay.yaml
+
+machine:
+    post:
+        IMAGE_INSTALL:append:
+            comment: 'Linux-side libmetal/open-amp libs + default demos (mirrors VEK385 build-a78mali/conf/local.conf), plus the RPU_2 Zephyr OpenAMP firmware (deployed to /lib/firmware for Linux remoteproc, see meta-erica-edf recipes-bsp/openamp/rave2-amp-openamp-fw.bb)'
+            op: '='
+            val: ' packagegroup-openamp rave2-amp-openamp-fw'
+        RAVE2_LIBMETAL_MC:
+            comment: 'RPU running the libmetal demo (meta-erica-edf rave2-libmetal-demo-rpu-baremetal.inc); must match a cortexr52-N-baremetal multiconfig'
+            op: '='
+            val: '${MACHINE}-cortexr52-4-baremetal'
+        RAVE2_LIBMETAL_BIF_ATTR:
+            comment: 'bootgen attributes for that RPU: R52_4 = physical Cluster C core 0 (TCM 0xEBB00000) -> cluster=2, core=r52-0'
+            op: '='
+            val: 'core=r52-0, cluster=2, tcmboot'
+        RAVE2_OPENAMP_MC:
+            comment: 'RPU running the Zephyr OpenAMP firmware (meta-erica-edf rave2-amp-openamp-fw.bb); must match a cortexr52-N-zephyr multiconfig'
+            op: '='
+            val: '${MACHINE}-cortexr52-2-zephyr'
+        RAVE2_OPENAMP_SLOT:
+            comment: 'remoteproc slot in the firmware path /lib/firmware/xilinx/${MACHINE}/rpu/<slot>/'
+            op: '='
+            val: '2'

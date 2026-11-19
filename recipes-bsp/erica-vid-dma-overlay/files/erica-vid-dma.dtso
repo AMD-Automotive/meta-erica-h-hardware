@@ -1,0 +1,75 @@
+// SPDX-License-Identifier: BSD-3-Clause OR GPL-2.0-or-later
+// Copyright © Advanced Micro Devices, Inc., or its affiliates. All rights reserved.
+// Contributors: JC
+// Maintainer: JC
+//
+// erica-vid-dma.dtso
+//
+// Runtime DT overlay applied by run_display_sentry.sh (and any
+// other application that wants the erica-vid-dma platform driver to
+// bind to the 12 axi4s_vid_dma instances in the sentry video
+// pre-process chain).
+//
+// At boot, vek385-imx623-sentry.dtsi + vek385-imx623-sentry-vid-dma-rd.dtsi
+// leave all 12 nodes (b0000-b000b) with `status = "disabled"` so
+// that the kernel platform driver does NOT bind them while visp /
+// visp_video is still bringing up the ISP async-notifier graph
+// (early binding was breaking ISP probe ordering and used to require
+// a modprobe blacklist on erica_vid_dma).
+//
+// This overlay flips those 12 nodes to "okay", causing the platform
+// core to instantiate them and the erica-vid-dma driver (already
+// modprobe'd by the script) to bind.  Removing the overlay (rmdir
+// of the configfs overlay dir) flips them back to "disabled" and
+// the driver releases.
+//
+// Node layout:
+//   b0000..b0003 - inference WRITE DMAs (NPU input, 4x)
+//   b0004..b0007 - read-source RD DMAs  (broadcaster source, 4x)
+//   b0008         - axi4s_video_compress codec (replaced the 4x viz WRITE
+//                   DMAs formerly at b0008..b000b).  Owned by the R52 (polled)
+//                   / A78 via /dev/mem -- NOT enabled here; the kernel driver
+//                   must never bind it.
+//
+// b000c (FINN feeder) is intentionally NOT enabled here: it is owned
+// by userspace via /dev/mem (sentry_display, the R52 sentry firmware),
+// must never have the kernel driver bind.
+
+/dts-v1/;
+/plugin/;
+
+/ {
+    fragment@0 {
+        target = <&sentry_vid_pre_proces_vc0_axi4s_vid_dma_0>;
+        __overlay__ { status = "okay"; };
+    };
+    fragment@1 {
+        target = <&sentry_vid_pre_proces_vc1_axi4s_vid_dma_0>;
+        __overlay__ { status = "okay"; };
+    };
+    fragment@2 {
+        target = <&sentry_vid_pre_proces_vc2_axi4s_vid_dma_0>;
+        __overlay__ { status = "okay"; };
+    };
+    fragment@3 {
+        target = <&sentry_vid_pre_proces_vc3_axi4s_vid_dma_0>;
+        __overlay__ { status = "okay"; };
+    };
+
+    fragment@4 {
+        target = <&sentry_vid_pre_proces_vc0_axi4s_vid_dma_rd>;
+        __overlay__ { status = "okay"; };
+    };
+    fragment@5 {
+        target = <&sentry_vid_pre_proces_vc1_axi4s_vid_dma_rd>;
+        __overlay__ { status = "okay"; };
+    };
+    fragment@6 {
+        target = <&sentry_vid_pre_proces_vc2_axi4s_vid_dma_rd>;
+        __overlay__ { status = "okay"; };
+    };
+    fragment@7 {
+        target = <&sentry_vid_pre_proces_vc3_axi4s_vid_dma_rd>;
+        __overlay__ { status = "okay"; };
+    };
+};

@@ -1,0 +1,131 @@
+reserved-memory:
+  libmetal_elf@9968000:
+    label: libmetal_elf
+    start: 0x9968000
+    size: 0x1000000
+    no-map: 1
+  libmetal_desc0@A968000:
+    label: libmetal_desc0
+    start: 0xA968000
+    size: 0x4000
+    no-map: 1
+  libmetal_desc1@A96c000:
+    label: libmetal_desc1
+    start: 0xA96c000
+    size: 0x4000
+    no-map: 1
+  libmetal_data@A970000:
+    label: libmetal_data
+    start: 0xA970000
+    size: 0x40000
+    no-map: 1
+
+axi:
+  libmetal_uio_desc0@A968000:
+    start: 0xA968000
+    size: 0x4000
+    compatible: "uio"
+  libmetal_uio_desc1@A96c000:
+    start: 0xA96c000
+    size: 0x4000
+    compatible: "uio"
+  libmetal_uio_data@A970000:
+    start: 0xA970000
+    size: 0x40000
+    compatible: "uio"
+
+  timer@f1ed0000:
+    compatible: "uio"
+  # linux -> rpu4 libmetal IPI (APU-side channel of the ipi4<->ipi3 pair)
+  mailbox@eb370000:
+    compatible: "uio"
+
+domains:
+  APU_Linux:
+    compatible: openamp,domain-v1
+    domain-to-domain:
+      compatible: openamp,domain-to-domain-v1
+      libmetal-relation:
+        compatible: libmetal,ipc-v1
+        relation0:
+          remote: RPU_4_BM
+          carveouts: [ libmetal_uio_desc0@A968000, libmetal_uio_desc1@A96c000, libmetal_uio_data@A970000 ]
+          # libmetal pair: ipi4 (APU, A78_0) <-> ipi3 (RPU_4, R52_4); ipi5/ipi6 stay with the ISP.
+          mbox: ipi_4_to_ipi_3 # libmetal/CANFD example app (APU side)
+          timer: ttc3
+
+  RPU_4_BM:
+    compatible: openamp,domain-v1
+    domain-to-domain:
+      compatible: openamp,domain-to-domain-v1
+      libmetal-relation:
+        compatible: libmetal,ipc-v1
+        relation0:
+          host: APU_Linux
+          carveouts: [ libmetal_uio_desc0@A968000, libmetal_uio_desc1@A96c000, libmetal_uio_data@A970000 ]
+          mbox: ipi_3_to_ipi_4 # libmetal/CANFD example app (RPU side)
+          timer: [ ttc2, ttc3 ]
+          elfload: [ libmetal_elf@9968000 ]
+
+    # Physical core verified per R52_TCM_CLUSTER_ADDRESSING_FINDINGS.md: Cluster C,
+    # core 0 (TCM base 0xEBB00000). "RPU_4_BM" is our own human-readable domain
+    # name (mirrors VEK385's RPU_1_BM) -- cluster_cpu: cortexr52_4 in the base
+    # overlay (rave2-rpu-base-overlay.yaml) is what actually binds this domain
+    # to physical Cluster C; the TCM addresses below are what Lopper uses to
+    # place it there, not the domain name itself. Deliberately a DIFFERENT
+    # physical cluster than RPU_2_BM (Cluster B) -- two independent domains
+    # must never share a cluster span, see findings doc.
+    sram:
+      - dev: libmetal_elf@9968000
+        start: 0x9968000
+        size: 0x1000000
+      - dev: r52_0c_atcm_global@ebb00000
+        label: r52_0c_atcm_global
+        size: 64K
+        spec_name: R52_0C_ATCM_GLOBAL
+        start: '0xebb00000'
+      - dev: r52_0c_btcm_global@ebb10000
+        label: r52_0c_btcm_global
+        size: 32K
+        spec_name: R52_0C_BTCM_GLOBAL
+        start: '0xebb10000'
+      - dev: r52_0c_ctcm_global@ebb20000
+        label: r52_0c_ctcm_global
+        size: 32K
+        spec_name: R52_0C_CTCM_GLOBAL
+        start: '0xebb20000'
+
+    # Give the R52 baremetal domain ownership of CANFD_1 (can@f19f0000) and
+    # CANFD_3 (can@f1a10000) -- the two CAN-FD buses physically wired on the
+    # RAVE2 PCB (decided 2026-10-02; see Execution_plan.md Key finding #3).
+    # Mirrors VEK385's single-CAN access: block (versal-2ve-2vm-libmetal-overlay.yaml)
+    # but grants both RAVE2 buses to the same domain. This creates the PLM
+    # subsystem pm_add_requirement so XPm_RequestNode/XPm_ClockEnable from the
+    # R52 firmware succeed (previously -22 NO_ACCESS: both CANs owned by APU/
+    # Linux). Linux side must additionally disable &can0/&can1/&can2/&can3 in
+    # the hand-authored system-conf dtsi (separate follow-up step) so the
+    # xilinx_can driver does not also bind/clock-gate these controllers.
+    #
+    # Also grant visibility of ipi4 (mailbox@eb370000, the APU-side partner
+    # of our ipi4/ipi3 libmetal pair). Without this, Lopper's domain pruning
+    # drops ipi4's top-level node entirely from RPU_4_BM's generated dts
+    # (confirmed: absent from rave2-baseline-2026-1-cortexr52-4-baremetal.dts,
+    # present in cortexa78-linux.dts) because it's APU-owned hardware. This
+    # breaks xlnx_libmetal_gen_output_file() in Lopper's openamp_xlnx.py
+    # assist, which looks up the remote IPI's top-level "mailbox@*" node by
+    # matching xlnx,ipi-bitmask to read its xlnx,int-id -- an IndexError
+    # results when that lookup comes up empty (root-caused via a full Python
+    # traceback patched into lopper/__init__.py, see Execution_plan.md).
+    # VEK385's libmetal relation uses ipi2/ipi3 instead of a custom pair;
+    # ipi2 being the SoC's default APU channel is apparently retained
+    # regardless, which is why VEK385 never hit this.
+    access:
+      - dev: can@f19f0000
+        flags: {}
+        label: canfd_1
+      - dev: can@f1a10000
+        flags: {}
+        label: canfd_3
+      - dev: mailbox@eb370000
+        flags: {}
+        label: ipi4

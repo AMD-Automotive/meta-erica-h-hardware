@@ -1,0 +1,353 @@
+// Copyright © Advanced Micro Devices, Inc., or its affiliates. All rights reserved.
+// SPDX-License-Identifier: MIT
+// Contributors: LT
+// Maintainer: LT
+/ {
+    model = "VEK385 ISP - AMD Versal Gen 2";
+	compatible = "amd,versal2";
+
+	chosen {
+		stdout-path = "serial1:115200n8";
+		bootargs = "earlycon=pl011,mmio32,0xf1930000 console=ttyAMA1,115200";
+		xen_bootargs = "console=dtuart dtuart=serial1 dom0_mem=2500M dom0_max_vcpus=1 bootscrub=0 vwfi=native";
+		dom0_bootargs = "console=hvc0 earlycon=xen earlyprintk=xen clk_ignore_unused cma=1000M";
+	};
+	aliases {
+		/* Board EEPROM nvmem alias. Kept in this shared SDT fragment so every
+		 * versal-2ve-2vm-vek385-sdt-seg machine that HAS the EEPROM (vek385-isp,
+		 * vek385-imx623-sentry, vek385-xylon-sentry) gets it. rave2-xylon-sentry has
+		 * no eeprom label and drops it per-machine via /delete-property/ nvmem1
+		 * in its own dtsi -- do NOT remove it here (that broke vek385-isp). */
+		nvmem1 = &eeprom;
+		/delete-property/ serial0;
+	};
+
+	reserved-memory {
+		#address-cells = <0x2>;
+		#size-cells = <0x2>;
+		ranges;
+
+		/delete-node/ cma_reserved@800000000;
+		// Used to reserve memory for VCU
+		shared_dma_reserved: shared_dma_mem_region {
+			compatible = "shared-dma-pool";
+			reg = <0x8 0x0 0x1 0x40000000>;
+			linux,cma-default;
+			reusable;
+		};
+
+
+	};
+        remoteproc@eba00000 {
+                compatible = "xlnx,versal-net-r52fss";
+                #address-cells = <0x2>;
+                #size-cells = <0x2>;
+                xlnx,cluster-mode = <0x0>;
+                ranges = <0x0 0x0 0x0 0xeba00000 0x0 0x10000 0x0 0x10000 0x0 0xeba10000 0x0 0x8000 0x0 0x18000 0x0 0xeba20000 0x0 0x8000>;
+
+                r52f@0 {
+                        compatible = "xlnx,versal2-r52f";
+                        power-domains = <&versal2_firmware 0x181100bf>,
+                         <&versal2_firmware 0x183180cb>,
+                         <&versal2_firmware 0x183180cc>,
+                         <&versal2_firmware 0x183180cd>;
+                        reg = <0x0 0x0 0x0 0x10000 0x0 0x10000 0x0 0x8000 0x0 0x18000 0x0 0x8000>;
+                        reg-names = "r52_0a_atcm_global@eba00000", "r52_0a_btcm_global@eba10000", "r52_0a_ctcm_global@eba20000";
+                        memory-region = <0x272 0x275 0x273 0x274 0x271>;
+                        mboxes = <&ipi_1_nobuf_to_ipi_2_nobuf 0x0>,
+                         <&ipi_1_nobuf_to_ipi_2_nobuf 0x1>;
+                        mbox-names = "tx", "rx";
+                };
+        };
+};
+
+&i2c0 {
+	status = "disabled";
+};
+
+&amba_pl {
+
+	axis_broadcastervcap_axis_broadcaster_0@0 {
+		status="disabled";
+	};
+
+	axis_broadcastervcap_axis_broadcaster_1@0 {
+		status="disabled";
+	};
+
+	axis_broadcastervcap_axis_broadcaster_2@0 {
+		status="disabled";
+	};
+
+	axis_broadcastervcap_axis_broadcaster_3@0 {
+		status="disabled";
+	};
+
+	axis_broadcastervcap_axis_broadcaster_4@0 {
+		status="disabled";
+	};
+
+	axis_broadcastervcap_axis_broadcaster_5@0 {
+		status="disabled";
+	};
+
+	telluride_drm {
+		compatible = "xlnx,aiarm";
+	};
+
+	ml_pre_process: ml-pre-process@b0010000 {
+		compatible = "xlnx,ml-pre-process-v2";
+		reg = <0x0 0xb0010000 0x0 0x00010000>,
+		      <0x0 0xb0000000 0x0 0x00010000>,
+		      <0x0 0xb0040000 0x0 0x00010000>,
+		      <0x0 0xb0020000 0x0 0x00010000>;
+		reg-names = "fvc_rd", "fvc_wr","svc_rd", "svc_wr";
+		interrupts = <17 0>,<18 0>,<19 0>,<20 0>;
+		interrupt-names = "fvc_rd","fvc_wr","svc_rd","svc_wr";
+		interrupt-parent = <&axi_intc_0>;
+	};
+};
+
+// Fix interrupts, something funky with SDT mapping
+&encoder {
+	interrupts = <0x8 0x2 0x4>;
+};
+
+&decoder {
+	interrupts = <0x7 0x2 0x4>;
+};
+
+&aie_aperture_0 {
+	interrupts = <0x00 0xce 0x04 0x00 0xcf 0x04 0x00 0xd0 0x04>;
+};
+
+// ISP support for rproc
+&visp_mbox_rpu_6  {
+	memory-region = <&isp_mbox_buffer>;
+	rproc = <&rpu6_core>;
+};
+&visp_mbox_rpu_7  {
+	memory-region = <&isp_mbox_buffer>;
+	rproc = <&rpu7_core>;
+};
+&visp_mbox_rpu_8  {
+	memory-region = <&isp_mbox_buffer>;
+	rproc = <&rpu8_core>;
+};
+
+&visp_ss_00  {
+	memory-region = <&rproc_D_0_6_calib_load>;
+	xlnx,name = "visp_ss_00";
+	xlnx,iba0_max-width  = <0x780>;    // 1920
+	xlnx,iba0_max-height = <0x600>;    // 1536
+	xlnx,iba1_max-width  = <0x780>;
+	xlnx,iba1_max-height = <0x600>;
+	xlnx,iba2_max-width  = <0x780>;
+	xlnx,iba2_max-height = <0x600>;
+	xlnx,iba3_max-width  = <0x780>;
+	xlnx,iba3_max-height = <0x600>;
+
+};
+&visp_ss_01  {
+	memory-region = <&rproc_E_0_8_calib_load>;
+	xlnx,name = "visp_ss_01";
+	xlnx,rpu = <0x8>;
+};
+
+&visp_ss_12  {
+	memory-region = <&rproc_D_1_7_calib_load>;
+	xlnx,name = "visp_ss_12";
+	xlnx,rpu = <0x7>;
+};
+&visp_ss_13  {
+	memory-region = <&rproc_E_0_8_calib_load>;
+	xlnx,name = "visp_ss_13";
+	xlnx,rpu = <0x8>;
+};
+
+&visp_ss_24  {
+	memory-region = <&rproc_E_0_8_calib_load>;
+	xlnx,name = "visp_ss_24";
+};
+&visp_ss_25  {
+	memory-region = <&rproc_E_0_8_calib_load>;
+	xlnx,name = "visp_ss_25";
+};
+
+/*
+TTC timer nodes (timer@f1ea0000 to timer@f1ed0000) in the PS device tree causing conflict with
+the RPU firmware execution during Linux boot.So disabling them to ensures successful RPU log prints
+*/
+&ttc4 {
+	status = "disabled";
+};
+
+&ttc5 {
+	status = "disabled";
+};
+
+&ttc6 {
+	status = "disabled";
+};
+
+&ttc7 {
+	status = "disabled";
+};
+
+&serial0 {
+	status = "disabled";
+};
+
+// ================================================================
+// ISP RPU firmware / calibration + mailbox reserved-memory (2026.1 SDT fix)
+//
+// The 2026.1 sdt_import no longer flattens
+// versal-2ve-2vm-vek385-sdt-seg-system-conf.dtsi into the deployed
+// cortexa78-linux.dts, so the labels the visp_ss_*/visp_mbox_rpu_*
+// overrides above reference (rproc_D_0_6_calib_load,
+// rproc_D_1_7_calib_load, rproc_E_0_8_calib_load, isp_mbox_buffer) are
+// no longer defined by the base DTS and dtc fails with
+// "Reference to non-existent node or label".
+//
+// This block restores the FULL RPU6/7/8/9 ISP carveout that the 2025.2
+// SDT used to flatten in -- reg values verbatim from
+// versal-2ve-2vm-vek385-sdt-seg-system-conf.dtsi. All no-map.
+// ================================================================
+/ {
+	reserved-memory {
+		#address-cells = <0x2>;
+		#size-cells = <0x2>;
+		ranges;
+
+		rpu6_fw: rproc6@0c000000 {
+			no-map;
+			reg = <0x00 0xc000000 0x00 0x3800000>;
+		};
+		rproc_D_0_6_calib_load: rpu6_calib_load {
+			no-map;
+			reg = <0x0 0xF800000 0x0 0x28000>;
+		};
+		rproc_D_0_6_hal_mem_priv: rpu6_hal_mem_priv {
+			no-map;
+			reg = <0x0 0xF828000 0x0 0x01001000>;
+		};
+
+		rpu7_fw: rproc7@1082A000 {
+			no-map;
+			reg = <0x00 0x1082A000 0x00 0x3800000>;
+		};
+		rproc_D_1_7_calib_load: rpu7_calib_load {
+			no-map;
+			reg = <0x0 0x1402A000 0x0 0x28000>;
+		};
+		rproc_D_1_7_hal_mem_priv: rpu7_hal_mem_priv {
+			no-map;
+			reg = <0x0 0x14052000 0x0 0x01001000>;
+		};
+
+		rpu8_fw: rproc8@15054000 {
+			no-map;
+			reg = <0x00 0x15054000 0x00 0x3800000>;
+		};
+		rproc_E_0_8_calib_load: rpu8_calib_load {
+			no-map;
+			reg = <0x0 0x18854000 0x0 0x28000>;
+		};
+		rproc_E_0_8_hal_mem_priv: rpu8_hal_mem_priv {
+			no-map;
+			reg = <0x0 0x1887C000 0x0 0x01001000>;
+		};
+
+		rpu9_fw: rproc9@1987E000 {
+			no-map;
+			reg = <0x00 0x1987E000 0x00 0x3800000>;
+		};
+		rproc_E_1_9_calib_load: rpu9_calib_load {
+			no-map;
+			reg = <0x0 0x1D07E000 0x0 0x28000>;
+		};
+		rproc_E_1_9_hal_mem_priv: rpu9_hal_mem_priv {
+			no-map;
+			reg = <0x0 0x1D0A6000 0x0 0x01001000>;
+		};
+
+		isp_mbox_buffer: isp_mbox_buffer@1E0A8000 {
+			no-map;
+			reg = <0x00 0x1E0A8000 0x00 0x400000>;
+		};
+		rpu_shared_mem: rpu_shared_mem@1E4A8000 {
+			no-map;
+			reg = <0x0 0x1E4A8000 0x0 0x40000>;
+		};
+		isp_vring: vring@1fff7000 {
+			no-map;
+			reg = <0x00 0x1fff7000 0x00 0x8000>;
+		};
+		tcm_rpu6: rpu6_tcm {
+			no-map;
+			reg = <0x00 0xebb80000 0x00 0x30000>;
+		};
+		tcm_rpu7: rpu7_tcm {
+			no-map;
+			reg = <0x00 0xebbc0000 0x00 0x30000>;
+		};
+		tcm_rpu8: rpu8_tcm {
+			no-map;
+			reg = <0x00 0xebc00000 0x00 0x30000>;
+		};
+		tcm_rpu9: rpu9_tcm {
+			no-map;
+			reg = <0x00 0xebc40000 0x00 0x30000>;
+		};
+	};
+
+	/* Add remoteproc nodes required for loading isp firmware */
+	remoteproc@ebb80000 {
+		compatible = "xlnx,versal-net-r52fss";
+		#address-cells = <0x02>;
+		#size-cells = <0x02>;
+		xlnx,cluster-mode = <0x00>;
+		ranges = <0x00 0x00 0x00 0xebb80000 0x00 0x10000 0x00 0x10000 0x00 0xebb90000 0x00 0x8000 0x00 0x18000 0x00 0xebba0000 0x00 0x8000 0x01 0x00 0x00 0xebbc0000 0x00 0x10000 0x01 0x10000 0x00 0xebbd0000 0x00 0x8000 0x01 0x18000 0x00 0xebbe0000 0x00 0x8000>;
+
+		rpu6_core: r52f@0 {
+			compatible = "xlnx,versal2-r52f";
+			power-domains = <&versal2_firmware 0x181100f3 &versal2_firmware 0x18318106 &versal2_firmware 0x18318107 &versal2_firmware 0x18318108>;
+			reg = <0x00 0x00 0x00 0x10000 0x00 0x10000 0x00 0x8000 0x00 0x18000 0x00 0x8000>;
+			reg-names = "r52_0a_atcm_global@eba00000\0r52_0a_btcm_global@eba10000\0r52_0a_ctcm_global@eba20000";
+			memory-region = <&rpu6_fw>;
+		};
+		rpu7_core: r52f@1 {
+			compatible = "xlnx,versal2-r52f";
+			power-domains = <&versal2_firmware 0x181100f4 &versal2_firmware 0x18318109 &versal2_firmware 0x1831810a &versal2_firmware 0x1831810b>;
+			reg = <0x01 0x00 0x00 0x10000 0x01 0x10000 0x00 0x8000 0x01 0x18000 0x00 0x8000>;
+			reg-names = "r52_0a_atcm_global@eba00000\0r52_0a_btcm_global@eba10000\0r52_0a_ctcm_global@eba20000";
+			memory-region = <&rpu7_fw>;
+		};
+	};
+	remoteproc@ebc00000 {
+		compatible = "xlnx,versal-net-r52fss";
+		#address-cells = <0x02>;
+		#size-cells = <0x02>;
+		xlnx,cluster-mode = <0x00>;
+		ranges = <0x00 0x00 0x00 0xebc00000 0x00 0x10000 0x00 0x10000 0x00 0xebc10000 0x00 0x8000 0x00 0x18000 0x00 0xebc20000 0x00 0x8000 0x01 0x00 0x00 0xebc40000 0x00 0x10000 0x01 0x10000 0x00 0xebc50000 0x00 0x8000 0x01 0x18000 0x00 0xebc60000 0x00 0x8000>;
+
+		rpu8_core: r52f@0 {
+			compatible = "xlnx,versal2-r52f";
+			power-domains = <&versal2_firmware 0x181100f5 &versal2_firmware 0x1831810c &versal2_firmware 0x1831810d &versal2_firmware 0x1831810e>;
+			reg = <0x00 0x00 0x00 0x10000 0x00 0x10000 0x00 0x8000 0x00 0x18000 0x00 0x8000>;
+			reg-names = "r52_0a_atcm_global@eba00000\0r52_0a_btcm_global@eba10000\0r52_0a_ctcm_global@eba20000";
+			memory-region = <&rpu8_fw>;
+		};
+
+		r52f@1 {
+			compatible = "xlnx,versal2-r52f";
+			power-domains = <&versal2_firmware 0x181100f6 &versal2_firmware 0x1831810f &versal2_firmware 0x18318110 &versal2_firmware 0x18318111>;
+			reg = <0x01 0x00 0x00 0x10000 0x01 0x10000 0x00 0x8000 0x01 0x18000 0x00 0x8000>;
+			reg-names = "r52_0a_atcm_global@eba00000\0r52_0a_btcm_global@eba10000\0r52_0a_ctcm_global@eba20000";
+			memory-region = <&rpu9_fw>;
+		};
+	};
+
+};
+
+

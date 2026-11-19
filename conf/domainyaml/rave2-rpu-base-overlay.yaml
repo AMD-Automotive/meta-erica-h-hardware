@@ -1,0 +1,52 @@
+domains:
+  APU_Linux:
+    compatible: openamp,domain-v1
+    cpus:
+      - cluster: cpus_a78
+        cpumask: 0xff
+        mode:
+          secure: false
+          el: 0x3
+    os,type: linux
+
+  RPU_2_Zephyr:
+    compatible: openamp,domain-v1
+    cpus:
+      - cluster: cpus_r52_2
+        # cluster_cpu is required for RPU domains. Lopper uses it to auto-generate
+        # cpu_config_str, rpu_pd_val, core_num and cluster_cpu properties in the
+        # output DTS. Without it, remoteproc nodes will not be generated.
+        cluster_cpu: cortexr52_2
+        cpumask: 0x4
+        mode:
+          secure: true
+          el: 0x3
+    os,type: zephyr
+
+  RPU_4_BM:
+    compatible: openamp,domain-v1
+    cpus:
+      - cluster: cpus_r52_4
+        # cluster_cpu is required for RPU domains. Lopper uses it to auto-generate
+        # cpu_config_str, rpu_pd_val, core_num and cluster_cpu properties in the
+        # output DTS. Without it, remoteproc nodes will not be generated.
+        cluster_cpu: cortexr52_4
+        cpumask: 0x10
+        mode:
+          secure: true
+          el: 0x3
+    os,type: baremetal
+
+  # Mirrors VEK385's generic base (versal-2ve-2vm-multidomain-base.yaml),
+  # which carries a PMC_MB domain with a full cpus/cpumask/mode definition --
+  # its BSP rpu-overlay only adds "chosen" on top of this already-complete
+  # domain (see rave2-rpu-overlay.yaml). We don't have a generic base file
+  # shared across boards, so the full cpus definition is reproduced here
+  # directly.
+  PMC_MB:
+    compatible: openamp,domain-v1
+    cpus:
+      - cluster: cpus_microblaze_0
+        cpumask: 0x1
+        mode:
+          secure: false

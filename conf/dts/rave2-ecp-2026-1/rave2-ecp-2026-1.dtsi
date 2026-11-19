@@ -1,0 +1,445 @@
+// Copyright © Advanced Micro Devices, Inc., or its affiliates. All rights reserved.
+// Copyright (C) 2015-2024 Texas Instruments Incorporated - https://www.ti.com/
+// Modifications Copyright(C) 2026 Advanced Micro Devices, Inc. All rights reserved.
+// SPDX-FileCopyrightText: 2026 Advanced Micro Devices, Inc.
+// SPDX-License-Identifier: MIT AND BSD-2-Clause AND GPL-2.0-only
+// Contributors: LT
+// Maintainer: LT
+// DP83867 constants copied from Linux include/dt-bindings/net/ti-dp83867.h
+// (GPL-2.0-only OR MIT); MIT selected. GPIO_ACTIVE_LOW copied from
+// include/dt-bindings/gpio/gpio.h (GPL-2.0 OR BSD-2-Clause); BSD-2-Clause selected.
+#define DP83867_RGMIIDCTL_250_PS        0x0
+#define DP83867_RGMIIDCTL_500_PS        0x1
+#define DP83867_RGMIIDCTL_750_PS        0x2
+#define DP83867_RGMIIDCTL_1_NS          0x3
+#define DP83867_RGMIIDCTL_1_25_NS       0x4
+#define DP83867_RGMIIDCTL_1_50_NS       0x5
+#define DP83867_RGMIIDCTL_1_75_NS       0x6
+#define DP83867_RGMIIDCTL_2_00_NS       0x7
+#define DP83867_RGMIIDCTL_2_25_NS       0x8
+#define DP83867_RGMIIDCTL_2_50_NS       0x9
+#define DP83867_RGMIIDCTL_2_75_NS       0xa
+#define DP83867_RGMIIDCTL_3_00_NS       0xb
+#define DP83867_RGMIIDCTL_3_25_NS       0xc
+#define DP83867_RGMIIDCTL_3_50_NS       0xd
+#define DP83867_RGMIIDCTL_3_75_NS       0xe
+#define DP83867_RGMIIDCTL_4_00_NS       0xf
+
+#define   DP83867_PHYCR_FIFO_DEPTH_4_B_NIB  0x01
+#define   GPIO_ACTIVE_LOW 1
+
+
+
+/ {
+	model = "RAVE2 ECP - AMD Versal Gen 2";
+	compatible = "amd,versal2";
+	chosen {
+		stdout-path = "serial0:115200n8";
+		bootargs = "earlycon=pl011,mmio32,0xf1920000 console=ttyAMA0,115200";
+		xen_bootargs = "console=dtuart dtuart=serial0 dom0_mem=1000M dom0_max_vcpus=1 bootscrub=0 vwfi=native";
+		dom0_bootargs = "console=hvc0 earlycon=xen earlyprintk=xen clk_ignore_unused";
+	};
+
+	reserved-memory {
+		#address-cells = <0x2>;
+		#size-cells = <0x2>;
+		ranges;
+
+		/delete-node/ cma_reserved@800000000;
+		// Used to reserve memory for VCU
+		shared_dma_reserved: shared_dma_mem_region {
+			compatible = "shared-dma-pool";
+			reg = <0x8 0x0 0x1 0x40000000>;
+			linux,cma-default;
+			reusable;
+		};
+
+		//npu_dma_reserved: npup_dma_mem_region {
+		//	compatible = "shared-dma-pool";
+		//	size = <0x0 0x60000000>;
+		//	alloc-ranges = <0x500 0x0 0x0 0x80000000>;
+		//	no-map;
+		//};
+
+		/* ISP mem reservations - 320MB */
+		rpu6_fw: rproc6@0c000000 {
+			no-map;
+			reg = <0x00 0xc000000 0x00 0x3800000>;
+		};
+		rproc_D_0_6_calib_load: rpu6_calib_load {
+			no-map;
+			reg = <0x0  0xF800000 0x0 0x28000>;
+		};
+		rproc_D_0_6_hal_mem_priv: rpu6_hal_mem_priv {
+			no-map;
+			reg = <0x0 0xF828000 0x0 0x01001000>;
+		};
+
+		rpu7_fw: rproc7@1082A000 {
+			no-map;
+			reg = <0x00 0x1082A000 0x00 0x3800000>;
+		};
+		rproc_D_1_7_calib_load: rpu7_calib_load {
+			no-map;
+			reg = <0x0 0x1402A000 0x0 0x28000>;
+		};
+		rproc_D_1_7_hal_mem_priv: rpu7_hal_mem_priv {
+			no-map;
+			reg = <0x0 0x14052000 0x0 0x01001000>;
+		};
+
+		rpu8_fw: rproc8@15054000 {
+			no-map;
+			reg = <0x00 0x15054000 0x00 0x3800000>;
+		};
+		rproc_E_0_8_calib_load: rpu8_calib_load {
+			no-map;
+			reg = <0x0 0x18854000 0x0 0x28000>;
+		};
+		rproc_E_0_8_hal_mem_priv: rpu8_hal_mem_priv {
+			no-map;
+			reg = <0x0 0x1887C000 0x0 0x01001000>;
+		};
+
+		isp_mbox_buffer: isp_mbox_buffer@1E0A8000 {
+			no-map;
+			reg = <0x00 0x1E0A8000 0x00 0x400000>;
+		};
+		rpu_shared_mem: rpu_shared_mem@1E4A8000 {
+			no-map;
+			reg = <0x0 0x1E4A8000 0x0 0x40000>;
+		};
+		isp_vring: vring@1fff7000 {
+			no-map;
+			reg = <0x00 0x1fff7000 0x00 0x8000>;
+		};
+
+		tcm_rpu6: rpu6_tcm {
+			no-map;
+			reg = <0x00 0xebb80000 0x00 0x30000>;
+		};
+		tcm_rpu7: rpu7_tcm {
+			no-map;
+			reg = <0x00 0xebbc0000 0x00 0x30000>;
+		};
+		tcm_rpu8: rpu8_tcm {
+			no-map;
+			reg = <0x00 0xebc00000 0x00 0x30000>;
+		};
+
+
+	};
+
+	/* OpenAMP: Linux loads the Zephyr firmware onto R52_2 (Cluster B core 0, TCM 0xeba80000) */
+	remoteproc@eba80000 {
+		compatible = "xlnx,versal-net-r52fss";
+		#address-cells = <0x2>;
+		#size-cells = <0x2>;
+		xlnx,cluster-mode = <0x0>;
+		ranges = <0x0 0x0 0x0 0xeba80000 0x0 0x10000 0x0 0x10000 0x0 0xeba90000 0x0 0x8000 0x0 0x18000 0x0 0xebaa0000 0x0 0x8000>;
+
+		r52f@0 {
+			compatible = "xlnx,versal2-r52f";
+			/* PM_DEV_RPU_B_0, PM_DEV_TCM_B_0A/0B/0C */
+			power-domains = <&versal2_firmware 0x181100c1>,
+				<&versal2_firmware 0x183180d1>,
+				<&versal2_firmware 0x183180d2>,
+				<&versal2_firmware 0x183180d3>;
+			reg = <0x0 0x0 0x0 0x10000 0x0 0x10000 0x0 0x8000 0x0 0x18000 0x0 0x8000>;
+			reg-names = "r52_0b_atcm_global@eba80000", "r52_0b_btcm_global@eba90000", "r52_0b_ctcm_global@ebaa0000";
+			/* rsctbl must be first: the driver reads the resource-table pointer from entry 0 */
+			memory-region = <&rsctbl>, <&vdev0buffer>, <&vdev0vring0>, <&vdev0vring1>, <&ddrboot>;
+			mboxes = <&ipi_2_nobuf_to_ipi_1_nobuf 0x0>, <&ipi_2_nobuf_to_ipi_1_nobuf 0x1>;
+			mbox-names = "tx", "rx";
+		};
+	};
+
+	/* Add remoteproc nodes required for loading isp firmware */
+	remoteproc@ebb80000 {
+		compatible = "xlnx,versal-net-r52fss";
+		#address-cells = <0x02>;
+		#size-cells = <0x02>;
+		xlnx,cluster-mode = <0x00>;
+		ranges = <0x00 0x00 0x00 0xebb80000 0x00 0x10000 0x00 0x10000 0x00 0xebb90000 0x00 0x8000 0x00 0x18000 0x00 0xebba0000 0x00 0x8000 0x01 0x00 0x00 0xebbc0000 0x00 0x10000 0x01 0x10000 0x00 0xebbd0000 0x00 0x8000 0x01 0x18000 0x00 0xebbe0000 0x00 0x8000>;
+
+		rpu6_core: r52f@0 {
+			compatible = "xlnx,versal2-r52f";
+			power-domains = <&versal2_firmware 0x181100f3 &versal2_firmware 0x18318106 &versal2_firmware 0x18318107 &versal2_firmware 0x18318108>;
+			reg = <0x00 0x00 0x00 0x10000 0x00 0x10000 0x00 0x8000 0x00 0x18000 0x00 0x8000>;
+			reg-names = "r52_0a_atcm_global@eba00000\0r52_0a_btcm_global@eba10000\0r52_0a_ctcm_global@eba20000";
+			memory-region = <&rpu6_fw>;
+		};
+		rpu7_core: r52f@1 {
+			compatible = "xlnx,versal2-r52f";
+			power-domains = <&versal2_firmware 0x181100f4 &versal2_firmware 0x18318109 &versal2_firmware 0x1831810a &versal2_firmware 0x1831810b>;
+			reg = <0x01 0x00 0x00 0x10000 0x01 0x10000 0x00 0x8000 0x01 0x18000 0x00 0x8000>;
+			reg-names = "r52_0a_atcm_global@eba00000\0r52_0a_btcm_global@eba10000\0r52_0a_ctcm_global@eba20000";
+			memory-region = <&rpu7_fw>;
+		};
+	};
+
+	remoteproc@ebc00000 {
+		compatible = "xlnx,versal-net-r52fss";
+		#address-cells = <0x02>;
+		#size-cells = <0x02>;
+		xlnx,cluster-mode = <0x00>;
+		ranges = <0x00 0x00 0x00 0xebc00000 0x00 0x10000 0x00 0x10000 0x00 0xebc10000 0x00 0x8000 0x00 0x18000 0x00 0xebc20000 0x00 0x8000 0x01 0x00 0x00 0xebc40000 0x00 0x10000 0x01 0x10000 0x00 0xebc50000 0x00 0x8000 0x01 0x18000 0x00 0xebc60000 0x00 0x8000>;
+
+		rpu8_core: r52f@0 {
+			compatible = "xlnx,versal2-r52f";
+			power-domains = <&versal2_firmware 0x181100f5 &versal2_firmware 0x1831810c &versal2_firmware 0x1831810d &versal2_firmware 0x1831810e>;
+			reg = <0x00 0x00 0x00 0x10000 0x00 0x10000 0x00 0x8000 0x00 0x18000 0x00 0x8000>;
+			reg-names = "r52_0a_atcm_global@eba00000\0r52_0a_btcm_global@eba10000\0r52_0a_ctcm_global@eba20000";
+			memory-region = <&rpu8_fw>;
+		};
+
+		/*r52f@1 {
+			compatible = "xlnx,versal2-r52f";
+			power-domains = <&versal2_firmware 0x181100f6 &versal2_firmware 0x1831810f &versal2_firmware 0x18318110 &versal2_firmware 0x18318111>;
+			reg = <0x01 0x00 0x00 0x10000 0x01 0x10000 0x00 0x8000 0x01 0x18000 0x00 0x8000>;
+			reg-names = "r52_0a_atcm_global@eba00000\0r52_0a_btcm_global@eba10000\0r52_0a_ctcm_global@eba20000";
+			memory-region = <&rpu9_fw>;
+		};*/
+	};
+	aliases {
+		spi0 = "/axi/spi@f1010000";
+		nvmem0 = &eeprom;
+	};
+
+	/* Cortex-A78AE PMUv3. The SDT does not emit this node, without it the
+	 * kernel registers no PMU and perf/gatord/Streamline get no CPU counters.
+	 * PMU overflow IRQ is PPI 7 (INTID 23). */
+	pmu {
+		compatible = "arm,armv8-pmuv3";
+		interrupts = <0x1 0x7 0x4>;
+	};
+
+};
+
+&amba_pl {
+	telluride_drm {
+		compatible = "xlnx,aiarm";
+	};
+	ml_pre_process: ml-pre-process@b0050000 {
+		compatible = "xlnx,ml-pre-process-v2";
+		reg = <0x0 0xb0070000 0x0 0x00010000>,
+		      <0x0 0xb0050000 0x0 0x00010000>,
+		      <0x0 0xb0090000 0x0 0x00010000>,
+		      <0x0 0xb0080000 0x0 0x00010000>;
+		reg-names = "fvc_rd", "fvc_wr","svc_rd", "svc_wr";
+		interrupts = <3 0>,<4 0>,<9 0>,<10 0>;
+		interrupt-names = "fvc_rd","fvc_wr","svc_rd","svc_wr";
+		interrupt-parent = <&axi_intc_0>;
+	};
+};
+
+&gpio0 {
+	/* PLM owns PS MIO3 for PCIe PERST recovery. */
+	status = "disabled";
+};
+
+/* canfd_1/canfd_3 are owned by RPU_4 (libmetal/CANFD domain), not Linux. */
+&can1 {
+        status = "disabled";
+};
+
+&can3 {
+        status = "disabled";
+};
+
+/* serial1 is the shared RPU debug console: used by both RPU_2_Zephyr
+ * (OpenAMP) and RPU_4_BM (libmetal/CANFD, baremetal) -- libmetal/RPU_4 is
+ * tested first, so this UART is exercised there before RPU_2. */
+&serial1 {
+        status = "disabled";
+};
+
+/* rpmsg vdev needs a shared-dma-pool, else remoteproc start fails with -EINVAL */
+&vdev0buffer {
+	compatible = "shared-dma-pool";
+};
+
+&mmi_dwc3 {
+        dr_mode = "host";
+        maximum-speed = "super-speed-plus";
+        dma-coherent;
+        snps,dis_u2_susphy_quirk;
+        snps,dis_u3_susphy_quirk;
+        snps,usb3_lpm_capable;
+};
+
+
+&gem1 { /* PMC_MIO_48, LPD_MIO0-11/24/25 */
+ /*       phy-handle = <&phy1>; */
+        phy-mode = "rgmii-id";
+ /* MDIO doesnt work from ospi - so fixed link for now */
+ /*       mdio: mdio { */
+ /*               #address-cells = <1>; */
+ /*               #size-cells = <0>; */
+ /*               phy1: ethernet-phy@0 {  */
+ /*                       #phy-cells = <1>; */
+ /*                       compatible = "ethernet-phy-id2000.a231"; */
+ /*                       reg = <0>; */
+ /*                       ti,rx-internal-delay = <DP83867_RGMIIDCTL_3_00_NS>; */
+ /*                       ti,tx-internal-delay = <DP83867_RGMIIDCTL_2_75_NS>; */
+ /*                       ti,fifo-depth = <1>; */
+ /*                       ti,dp83867-rxctrl-strap-quirk; */
+ /*                       reset-assert-us = <100>; */
+ /*                       reset-deassert-us = <280>; */
+ /*                       reset-gpios = <&gpio0 25 GPIO_ACTIVE_LOW>; */
+ /*               }; */
+ /*        }; */
+        fixed-link { 
+                pause; 
+                full-duplex; 
+                speed = <1000>; 
+        };
+};
+
+&mmi_10gbe { /* 10GbE direct to switch, no PHY */
+        phy-mode = "10gbase-r";
+        fixed-link {
+                speed = <10000>;
+                full-duplex;
+        };
+};
+
+
+&ospi { /* PMC_MIO0-10, MIO12 */
+        reset-names = "qspi";
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+	flash0: flash@0 {
+		compatible = "micron,mt35xu01gcba1g12", "micron,mt35xu01g", "jedec,spi-nor";
+		reg = <0>;
+		spi-tx-bus-width = <8>;
+		spi-rx-bus-width = <8>;
+		spi-max-frequency = <20000000>;
+		no-wp;
+		spi-nor,octal-dtr-enable;
+		boot,primary;
+	};
+};
+
+&i2c0 {
+        eeprom: eeprom@50 {
+                compatible = "atmel,24c128";
+                bootph-all;
+                reg = <0x50>;
+        };
+};
+
+/*
+TTC timer nodes (timer@f1ea0000 to timer@f1ed0000) in the PS device tree causing conflict with
+the RPU firmware execution during Linux boot.So disabling them to ensures successful RPU log prints
+*/
+&ttc4 {
+	status = "disabled";
+};
+
+&ttc5 {
+	status = "disabled";
+};
+
+&ttc6 {
+	status = "disabled";
+};
+
+&ttc7 {
+	status = "disabled";
+};
+
+&vcap_hier_mipi_0_mipi_csi2_rx_subsyst_0 {
+	status = "disabled";
+};
+&vcap_hier_mipi_1_mipi_csi2_rx_subsyst_0 {
+	status = "disabled";
+};
+&vcap_hier_mipi_2_mipi_csi2_rx_subsyst_0 {
+	status = "disabled";
+};
+
+// ISP support for rproc
+&visp_mbox_rpu_6  {
+	memory-region = <&isp_mbox_buffer>;
+	rproc = <&rpu6_core>;
+};
+
+&visp_mbox_rpu_7  {
+	memory-region = <&isp_mbox_buffer>;
+	rproc = <&rpu7_core>;
+};
+
+&visp_mbox_rpu_8  {
+	memory-region = <&isp_mbox_buffer>;
+	rproc = <&rpu8_core>;
+};
+
+&visp_ss_00  {
+	memory-region = <&rproc_D_0_6_calib_load>;
+	xlnx,name = "visp_ss_00";
+	xlnx,rpu = <0x6>;
+};
+
+&visp_ss_12  {
+	memory-region = <&rproc_D_1_7_calib_load>;
+	xlnx,name = "visp_ss_12";
+	xlnx,rpu = <0x7>;
+};
+
+&visp_ss_24  {
+	memory-region = <&rproc_E_0_8_calib_load>;
+	xlnx,name = "visp_ss_24";
+	xlnx,rpu = <0x8>;
+};
+
+// ================================================================
+// VCU -- fix interrupts (something funky with SDT mapping)
+// ================================================================
+&encoder {
+	interrupts = <0x8 0x2 0x4>;
+};
+&decoder {
+	interrupts = <0x7 0x2 0x4>;
+};
+
+// AI Engine aperture: fix power-domains phandle (SDT generates wrong reference)
+// and override interrupt mapping
+//&aie_aperture_0 {
+//	interrupts = <0x00 0xce 0x04 0x00 0xcf 0x04 0x00 0xd0 0x04>;
+//};
+
+/ {
+	axi {
+		vmsg: vmsg@100000000000 {
+			compatible = "xlnx,virtio-msg-rave2-versal";
+			status = "okay";
+
+			/* Keep host-window first for the mmap ABI. */
+			/* MDB5 resources require pcie@ed931000 to remain disabled. */
+			reg = <0x1000 0x00000000 0x10 0x00000000>,	/* Host window, 64 GiB */
+			      <0x0800 0x00070000 0x0 0x00001000>,	/* virtio-msg cfg BRAM */
+			      <0x0000 0xed800000 0x0 0x00001000>,	/* Outgoing MSI-X */
+			      <0x0800 0x00050000 0x0 0x00001000>,	/* Incoming gen_irq */
+			      <0x0000 0xed860000 0x0 0x00002000>,	/* Outbound iATU */
+			      <0x0000 0xed828000 0x0 0x00004000>,	/* MDB5 HDMA */
+			      <0x0000 0xed931000 0x0 0x00001000>;	/* MDB5 IRQ aggregator */
+			reg-names = "host-window", "cfg", "doorbell", "irq-ack",
+				    "atu", "hdma", "hdma-irq";
+
+			/* Incoming doorbell and MDB5 completion, both level-high. */
+			interrupts = <0 148 4>, <0 165 4>;
+			interrupt-names = "doorbell", "hdma";
+
+			/* Channel 7: write to x86, read from x86. */
+			/* PF0 EFI must release Write 7 before runtime DMA. */
+			xlnx,mdb5-write-channels = <7>;
+			xlnx,mdb5-read-channels = <7>;
+
+			/* Outbound window to x86 DMA addresses starting at 0. */
+			xlnx,atu-region = <0>;
+			xlnx,atu-target = <0x0 0x0>;
+		};
+	};
+};

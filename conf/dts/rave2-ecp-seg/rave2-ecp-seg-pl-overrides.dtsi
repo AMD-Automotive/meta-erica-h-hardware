@@ -1,0 +1,90 @@
+// SPDX-License-Identifier: MIT
+// Copyright © Advanced Micro Devices, Inc., or its affiliates. All rights reserved.
+// Contributors: KC
+// Maintainer: KC
+//
+// rave2-ecp-seg — PL-side device-tree overlay overrides (SEGMENTED config)
+// =========================================================================
+//
+// These are the PL-side node customizations that, in the FLAT rave2-ecp build,
+// live in conf/dts/rave2-ecp/rave2-ecp.dtsi. In the segmented build the PL nodes
+// are not in the boot DTB; they are introduced at runtime by the generated PL
+// overlay (pl-overlay-full/pl.dtsi). This file carries the same customizations,
+// to be concatenated AFTER pl.dtsi and compiled together into pl.dtbo.
+//
+// NO /dts-v1/ or /plugin/ header here — this fragment is appended to pl.dtsi
+// (which already provides the overlay header). All labels targeted below
+// (axi_intc_0, vcap_hier_mipi_*, visp_mbox_rpu_*, visp_ss_*, encoder, decoder)
+// are defined by pl.dtsi, so they resolve within the combined overlay. The
+// memory-region phandles (isp_mbox_buffer, rproc_*_calib_load,
+// shared_dma_reserved) resolve against the base boot DTB __symbols__ via the
+// overlay __fixups__ (base is built with dtc -@).
+//
+// RE-ANCHOR: the flat dtsi attaches telluride_drm + ml_pre_process under
+// &amba_pl (the PL AXI bus). The -g full flow homes PL AXI peripherals under
+// &amba (see axi_intc_0 in pl.dtsi), so these are re-anchored to &amba to match.
+
+&amba {
+	telluride_drm {
+		compatible = "xlnx,aiarm";
+	};
+	ml_pre_process: ml-pre-process@b0050000 {
+		compatible = "xlnx,ml-pre-process-v2";
+		reg = <0x0 0xb0070000 0x0 0x00010000>,
+		      <0x0 0xb0050000 0x0 0x00010000>,
+		      <0x0 0xb0090000 0x0 0x00010000>,
+		      <0x0 0xb0080000 0x0 0x00010000>;
+		reg-names = "fvc_rd", "fvc_wr","svc_rd", "svc_wr";
+		interrupts = <3 0>,<4 0>,<9 0>,<10 0>;
+		interrupt-names = "fvc_rd","fvc_wr","svc_rd","svc_wr";
+		interrupt-parent = <&axi_intc_0>;
+	};
+};
+
+&vcap_hier_mipi_0_mipi_csi2_rx_subsyst_0 {
+	status = "disabled";
+};
+&vcap_hier_mipi_1_mipi_csi2_rx_subsyst_0 {
+	status = "disabled";
+};
+&vcap_hier_mipi_2_mipi_csi2_rx_subsyst_0 {
+	status = "disabled";
+};
+
+// ISP support for rproc
+&visp_mbox_rpu_6 {
+	memory-region = <&isp_mbox_buffer>;
+};
+&visp_mbox_rpu_7 {
+	memory-region = <&isp_mbox_buffer>;
+};
+&visp_mbox_rpu_8 {
+	memory-region = <&isp_mbox_buffer>;
+};
+
+&visp_ss_00 {
+	memory-region = <&rproc_D_0_6_calib_load>;
+	xlnx,name = "visp_ss_00";
+	xlnx,rpu = <0x6>;
+};
+&visp_ss_12 {
+	memory-region = <&rproc_D_1_7_calib_load>;
+	xlnx,name = "visp_ss_12";
+	xlnx,rpu = <0x7>;
+};
+&visp_ss_24 {
+	memory-region = <&rproc_E_0_8_calib_load>;
+	xlnx,name = "visp_ss_24";
+	xlnx,rpu = <0x8>;
+};
+
+// ================================================================
+// VCU -- fix interrupts (something funky with SDT mapping)
+// ================================================================
+&encoder {
+	interrupts = <0x8 0x2 0x4>;
+};
+&decoder {
+	interrupts = <0x7 0x2 0x4>;
+	memory-region = <&shared_dma_reserved>;
+};

@@ -1,0 +1,7 @@
+Copyright © Advanced Micro Devices, Inc., or its affiliates. All rights reserved.
+SPDX-License-Identifier: MIT
+Contributors: Uwe Gertheinrich
+Maintainer: KC
+# Minimal APU_Linux domain stub (cpus/os,type only) so Lopper has a host
+# domain to attach the OpenAMP/libmetal relations in the other overlays to.
+# Must be first in the --domain-file chain.

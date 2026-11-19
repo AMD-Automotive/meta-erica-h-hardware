@@ -1,0 +1,48 @@
+// Copyright © Advanced Micro Devices, Inc., or its affiliates. All rights reserved.
+// SPDX-License-Identifier: MIT
+// Contributors: KC
+// Maintainer: KC
+&i2c0 {
+	status = "okay";
+};
+
+/ {
+    model = "VEK385 Baseline RevB - AMD Versal Gen 2";
+    machine = "vek385-base-revb";
+	compatible = "amd,versal2";
+	chosen {
+		stdout-path = "serial0:115200n8";
+		bootargs = "earlycon=pl011,mmio32,0xf1930000 console=ttyAMA0,115200 cma=1000M";
+		xen_bootargs = "console=dtuart dtuart=serial1 dom0_mem=2500M dom0_max_vcpus=1 bootscrub=0 vwfi=native";
+		dom0_bootargs = "console=hvc0 earlycon=xen earlyprintk=xen clk_ignore_unused cma=1000M";
+	};
+	
+
+    
+
+	reserved-memory {
+		#address-cells = <0x2>;
+		#size-cells = <0x2>;
+		ranges;
+
+		/delete-node/ cma_reserved@800000000;
+		// Used to reserve memory for VCU
+		shared_dma_reserved: shared_dma_mem_region {
+			compatible = "shared-dma-pool";
+			reg = <0x8 0x0 0x1 0x40000000>;
+			//linux,cma-default;
+			reusable;
+		};
+
+		//npu_dma_reserved: npup_dma_mem_region {
+		//	compatible = "shared-dma-pool";
+		//	size = <0x0 0x60000000>;
+		//	alloc-ranges = <0x500 0x0 0x0 0x80000000>;
+		//	no-map;
+		//};
+
+    };
+
+	/delete-node/ amba_pl;
+
+};

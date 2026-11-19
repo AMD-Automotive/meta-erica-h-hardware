@@ -1,0 +1,70 @@
+// Copyright © Advanced Micro Devices, Inc., or its affiliates. All rights reserved.
+// SPDX-License-Identifier: MIT
+// Contributors: KC
+// Maintainer: KC
+/ {
+        model = "RAVE2 Recovery - AMD Versal Gen 2";
+		compatible = "amd,versal2";
+		chosen {
+			stdout-path = "serial0:115200n8";
+			bootargs = "earlycon=pl011,mmio32,0xf1920000 console=ttyAMA0,115200";
+			xen_bootargs = "console=dtuart dtuart=serial0 dom0_mem=1000M dom0_max_vcpus=1 bootscrub=0 vwfi=native";
+			dom0_bootargs = "console=hvc0 earlycon=xen earlyprintk=xen clk_ignore_unused";
+		};
+
+        aliases {
+		    spi0 = "/axi/spi@f1010000";
+	    };
+};
+
+&gpio0 {
+        status = "okay";
+};
+
+&mmi_dwc3 {
+        dr_mode = "host";
+        maximum-speed = "super-speed";
+        dma-coherent;
+        snps,dis_u2_susphy_quirk;
+        snps,dis_u3_susphy_quirk;
+        snps,usb3_lpm_capable;
+};
+
+
+&gem1 {
+ 
+        phy-mode = "rgmii-id";
+        fixed-link { 
+                pause; 
+                full-duplex; 
+                speed = <1000>; 
+        };
+};
+
+
+&ospi {
+        reset-names = "qspi";
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        flash0: flash@0 {
+                compatible = "micron,mt35xu01gcba1g12",
+                             "micron,mt35xu01g",
+                             "jedec,spi-nor";
+                reg = <0>;
+                spi-tx-bus-width = <1>;
+                spi-rx-bus-width = <8>;
+                spi-max-frequency = <20000000>;
+                cdns,read-delay = <4>;
+                cdns,tshsl-ns = <50>;
+                cdns,tsd2d-ns = <50>;
+                cdns,tchsh-ns = <4>;
+                cdns,tslch-ns = <4>;
+                no-wp;
+        };
+};
+
+&mmi_10gbe {
+        status = "disabled";
+};
+

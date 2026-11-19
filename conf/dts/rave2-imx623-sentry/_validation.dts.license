@@ -1,0 +1,7 @@
+Copyright © Advanced Micro Devices, Inc., or its affiliates. All rights reserved.
+SPDX-License-Identifier: MIT
+Contributors: JC
+Maintainer: JC
+# Validation DTS for the gen-machineconf output in this directory.
+# Lives in the regenerated tree, so the licence is kept in a sidecar;
+# see scripts/import_sdt.sh.

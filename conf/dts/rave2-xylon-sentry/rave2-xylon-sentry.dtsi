@@ -1,0 +1,956 @@
+// Copyright © Advanced Micro Devices, Inc., or its affiliates. All rights reserved.
+// Copyright (C) 2015-2024 Texas Instruments Incorporated - https://www.ti.com/
+// SPDX-License-Identifier: MIT AND BSD-2-Clause
+// Contributors: LT
+// Maintainer: LT
+// DP83867 constants copied from Linux include/dt-bindings/net/ti-dp83867.h
+// (GPL-2.0-only OR MIT); MIT selected. GPIO_ACTIVE_LOW copied from
+// include/dt-bindings/gpio/gpio.h (GPL-2.0 OR BSD-2-Clause); BSD-2-Clause selected.
+#define DP83867_RGMIIDCTL_250_PS        0x0
+#define DP83867_RGMIIDCTL_500_PS        0x1
+#define DP83867_RGMIIDCTL_750_PS        0x2
+#define DP83867_RGMIIDCTL_1_NS          0x3
+#define DP83867_RGMIIDCTL_1_25_NS       0x4
+#define DP83867_RGMIIDCTL_1_50_NS       0x5
+#define DP83867_RGMIIDCTL_1_75_NS       0x6
+#define DP83867_RGMIIDCTL_2_00_NS       0x7
+#define DP83867_RGMIIDCTL_2_25_NS       0x8
+#define DP83867_RGMIIDCTL_2_50_NS       0x9
+#define DP83867_RGMIIDCTL_2_75_NS       0xa
+#define DP83867_RGMIIDCTL_3_00_NS       0xb
+#define DP83867_RGMIIDCTL_3_25_NS       0xc
+#define DP83867_RGMIIDCTL_3_50_NS       0xd
+#define DP83867_RGMIIDCTL_3_75_NS       0xe
+#define DP83867_RGMIIDCTL_4_00_NS       0xf
+
+#define   DP83867_PHYCR_FIFO_DEPTH_4_B_NIB  0x01
+#define   GPIO_ACTIVE_LOW 1
+
+
+
+/ {
+        model = "RAVE2 Xylon Sentry - AMD Versal Gen 2";
+		compatible = "amd,versal2";
+		chosen {
+			stdout-path = "serial0:115200n8";
+			/*
+			 * CMA SIZING RULE -- the default CMA area is carved out of LOW DDR by the
+			 * `cma=` value below (this board cannot use linux,cma-default: the DT pool
+			 * must stay at 0x800000000 for ald3xx.fw, and setting both makes
+			 * rmem_cma_setup() bypass the DT node -> ZERO CMA).
+			 *
+			 * So cma= must fit the largest remaining contiguous low-DDR hole.  Add a
+			 * big low-DDR no-map carveout and you MUST shrink cma= to match, else:
+			 *     cma: Failed to reserve N MiB
+			 *     [drm] Failed to initialize the cma mem reserved nodes
+			 *     modetest: failed to create dumb buffer: Cannot allocate memory
+			 *
+			 * rave2-imx623 hit exactly this: aie_remap_shadow@40000000 (256 MB) took
+			 * the hole the comment below calls "~0x40000000", leaving 128 MB as the
+			 * largest, so cma= dropped 256M -> 96M there.  1920x1080 XR24 dumb buffers
+			 * are 8 MB each, so 96 MB is ample.
+			 * Check free holes with `lmb_dump_all` (U-Boot `bdinfo`) after any change.
+			 */
+			bootargs = "earlycon=pl011,mmio32,0xf1920000 console=ttyAMA0,115200 cma=256M iomem=relaxed";
+			xen_bootargs = "console=dtuart dtuart=serial0 dom0_mem=2500M dom0_max_vcpus=1 bootscrub=0 vwfi=native";
+			dom0_bootargs = "console=hvc0 earlycon=xen earlyprintk=xen clk_ignore_unused cma=256M";
+		};
+		/*
+		* Device tree reserved-memory fragment for ERICA-E face motion system.
+		*
+		* Memory layout (both RAVE2 and VEK385):
+		*
+		*   0x50000000 - 0x5007FFFF  (512 KB)   R52 firmware code/data
+		*   0x50100000 - 0x6FCFFFFF  (508 MB)   Visualization capture circular buffers
+		*     CH0: 0x50100000 - 0x57FFFFFF      (127 MB, 96 frames x 1.32 MB NV12)
+		*     CH1: 0x58000000 - 0x5FEFFFFF      (127 MB)
+		*     CH2: 0x5FF00000 - 0x67DFFFFF      (127 MB)
+		*     CH3: 0x67E00000 - 0x6FCFFFFF      (127 MB)
+		*   0x70000000 - 0x700FFFFF  (1 MB)     sentry_shared: A78 <-> R52 headers
+		*     ISP flag:      0x70000000         (one word; the rest of the 64 KB is free)
+		*     Wake rings:    0x70010000         (64 KB, R52 Ethernet wake channel)
+		*     Settings:      0x70020000         (sentry_cfg, VCTL, DETQ, reserved: 4 KB each)
+		*     free:          0x70024000         (48 KB)
+		*     Codec header:  0x70038000         (codec_shared_header_t, "CDEC")
+		*     Shared header: 0x70030000         (4 KB, capture_shared_header_t)
+		*     YOLO results:  0x70040000         (4 KB, yolo_shared_header_t, A78->R52)
+		*   0x70400000 - 0x773FFFFF  (112 MB)   NPU CMA pool (all xdna-driver BOs)
+		*   0x77400000 - 0x77FFFFFF  (12 MB)    Ping-pong alternate DMA buffer
+		*
+		* NOTE: U-Boot scriptaddr is at 0x78000000 (common default).
+		* Pingpong region ends at 0x77FFFFFF to avoid overlap.
+		* If U-Boot loads images at 0x54000000 (default image_addr), this
+		* overlaps the capture region. Update U-Boot env, e.g.:
+		*   setenv image_addr 0x18000000
+		*   setenv kernel_addr 0x18000000
+		*
+		* Include this file from the top-level device tree:
+		*   /include/ "device_tree_reserved_memory.dtsi"
+		*/
+		reserved-memory {
+			#address-cells = <0x2>;
+			#size-cells = <0x2>;
+			ranges;
+
+			/delete-node/ cma_reserved@800000000;
+			// Used to reserve memory for VCU
+			/*
+			 * 2026-04-28 DEBUG BUILD: shrunk CMA pool to match the
+			 * reduced-DDR Vivado config (rave2_reduced_ddr.tcl which
+			 * dropped C1/C2/C3 LPDDR5X controllers, leaving only
+			 * NoC_C0_C1 with 2GB @ 0x0 + 2GB @ 0x800000000 = 4GB total).
+			 *
+			 * The original 3GB (0xC0000000) reservation at 0x800000000
+			 * extended past the end of physical DRAM (only 2GB now lives
+			 * in the high bank), causing cma_init_reserved_areas() to
+			 * walk into an unmapped vmemmap region and panic with a
+			 * level-2 translation fault on first boot.
+			 *
+			 * Shrunk to 1GB to fit comfortably inside the 2GB high bank
+			 * and leave room for kernel allocations there. Revert to the
+			 * original 3GB/0xC0000000 size when the full 4-controller
+			 * DDR config is restored.
+			 *
+			 * ORIGINAL (full-DDR config, restore later):
+			 *   reg = <0x8 0x0 0x0 0xC0000000>;   // 3 GB CMA
+			 */
+			shared_dma_reserved: shared_dma_mem_region {
+				compatible = "shared-dma-pool";
+				reg = <0x8 0x0 0x0 0x2c000000>;  /* 704 MB CMA (VCU/ALD3); ends at 0x82c000000 where codec_preroll begins */
+				//linux,cma-default;
+				reusable;
+			};
+
+			/*
+			 * 2026-04-28 DEBUG BUILD: override the auto-generated
+			 * memory@00000000 node to advertise only the DRAM that the
+			 * reduced-DDR BD actually provisions. Without this, the
+			 * SDT-emitted node still claims 14GB at 0x800000000 (the
+			 * old 4-controller layout) and the kernel touches PFNs that
+			 * have no backing struct page.
+			 *
+			 * ORIGINAL auto-generated reg (full-DDR config, restore later):
+			 *   reg = <0x0 0x00000000 0x0 0x80000000     // 2 GB low
+			 *          0x8 0x00000000 0x3 0x80000000>;   // 14 GB high
+			 */
+
+			/*
+			* R52 baremetal firmware region.
+			* The R52 linker script places code/data starting at 0x50000000.
+			* Marked no-map so Linux does not touch this memory.
+			*/
+			r52_firmware: r52_fw@50000000 {
+				reg = <0x0 0x50000000 0x0 0x00080000>;  /* 512 KB */
+				no-map;
+			};
+
+			/*
+			* Visualization DMA capture circular buffers.
+			* 4 channels x 127 MB (96 frames @ 1280x720 NV12 each).
+			* The R52 firmware writes frames here; the A78 reads via /dev/mem
+			* and the capture_extract tool extracts to MP4.
+			*
+			* Region spans 0x50100000 to 0x6FD00000 (508 MB).
+			* Rounded up to cover the gap from r52_fw to the sentry_shared region.
+			*/
+			capture_buffers: capture_buf@50100000 {
+				reg = <0x0 0x50100000 0x0 0x1FC00000>;  /* 508 MB */
+				no-map;
+			};
+
+			/*
+			* A78 <-> R52 shared headers.
+			*
+			* Every occupant is a FIXED ABSOLUTE address compiled into both sides
+			* (capture_shared.h, codec_shared.h, yolo_shared.h, power_shared.h), so the
+			* base and size of this node must not move.
+			*
+			*   0x70000000 : ISP master flag word; the rest of the 64 KB is free
+			*   0x70010000 : R52 Ethernet wake channel rings and buffers (64 KB)
+			*   0x70020000 : sentry_cfg detection settings page   A78 <-> R52
+			*   0x70021000 : VCTL encoder runtime control page    A78 <-> R52
+			*   0x70022000 : DETQ per-camera detection edges      R52  -> A78
+			*   0x70023000 : reserved for a cross-core wake mailbox
+			*   0x70024000 : free
+			*   0x70030000 : capture_shared_header_t  "CAPT"  R52  -> A78
+			*   0x70038000 : codec_shared_header_t    "CDEC"  R52 <-> A78
+			*   0x70040000 : yolo_shared_header_t     "YOLO"  R52  -> A78 (seqlock)
+			*   0x70048000 : free           (was the NPU ping-pong flag)
+			*   0x70050000 : power_shared_header_t    "PWRS"  A78 <-> R52
+			*   0x70050800 : PWRX power extension block           A78 <-> R52
+			*   0x70070000 : sentry status words
+			*   0x70080000 : ISP command staging, scripts/stage_isp_cmds.py (spare tail)
+			*
+			* Total: 1 MB covers 0x70000000 - 0x700FFFFF.
+			*
+			* Was named finn_buffer/finn_buf until 2026-08-31.  No sentry BD has a FINN
+			* subsystem any more (no post_proc/DMA36/DMA40 cell in any of the four
+			* bd.tcl), so the old name described hardware that no longer exists.
+			*/
+			sentry_shared: sentry_shared@70000000 {
+				reg = <0x0 0x70000000 0x0 0x00100000>;  /* 1 MB */
+				no-map;
+			};
+
+			/*
+			* RPU-owned NPU image.  The R52 sentry app stages the pre-built HSA image
+			* here (queue, completion words, control code, weights, input tensor and the
+			* four classifier output heads) and drives the AIE manager over shmem+IPI.
+			* Offsets within the region are fixed -- see ERICA-E app/R52/src/npu_image.h.
+			*
+			* WAS a `shared-dma-pool` bound to telluride_drm so the amdxdna driver could
+			* allocate the model's BOs.  It MUST be no-map now: a reusable pool lets
+			* Linux hand out pages the NPU is mid-inference on.  telluride_drm is
+			* disabled below for the same reason.
+			*
+			* All four sentry targets use this base.  The bring-up base 0x28000000 is
+			* limo_buf (ISP NV12 staging) on the imx623 BDs, so it cannot be shared.
+			*
+			* 112 MB against ~61 MB needed by the 4-head YOLOv8n classifier; the top is
+			* constrained by U-Boot scriptaddr at 0x78000000.
+			*/
+			npu_buffers: npu_pool@70400000 {
+				reg = <0x0 0x70400000 0x0 0x07000000>;  /* 112 MB, 4MB-aligned for CMA */
+				no-map;
+			};
+
+			/*
+			* Ping-pong double-buffer for DMA/NPU decoupling.
+			* erica_vid_dma writes alternate frames here while NPU
+			* reads from the primary input BO in npu_pool.
+			* Also used as format-17 NCHW scratch when ping-pong
+			* is not active (both are never used simultaneously).
+			*
+			* DDR flag at 0x70048000 (within sentry_shared) tracks
+			* which buffer was last written: 0=A ready, 1=B ready.
+			*/
+			pingpong_buffer: pingpong_buf@77400000 {
+				reg = <0x0 0x77400000 0x0 0x00C00000>;  /* 12 MB */
+				no-map;
+			};
+		};
+
+		/*
+		 * 2026-04-28 DEBUG BUILD: override the auto-generated
+		 * memory@00000000 node to advertise only the DRAM that the
+		 * reduced-DDR BD (rave2_reduced_ddr.tcl) actually provisions.
+		 *
+		 * The reduced BD only assigns DDR_CH0_LEGACY (2GB @ 0x0) and
+		 * DDR_CH0_MED (2GB @ 0x800000000) -- total 4GB. The SDT-emitted
+		 * node still claims 14GB at 0x800000000 from the old 4-controller
+		 * layout; without this override the kernel walks PFNs that have
+		 * no backing struct page and panics in cma_init_reserved_areas().
+		 *
+		 * ORIGINAL auto-generated reg (full-DDR config, restore later):
+		 *   reg = <0x0 0x00000000 0x0 0x80000000      // 2 GB low
+		 *          0x8 0x00000000 0x3 0x80000000>;    // 14 GB high
+		 */
+		memory@00000000 {
+			device_type = "memory";
+			reg = <0x0 0x00000000 0x0 0x80000000>,    /* 2 GB low  */
+			      <0x8 0x00000000 0x0 0x80000000>;    /* 2 GB high */
+		};
+        aliases {
+		spi0 = "/axi/spi@f1010000";
+		/*
+		 * The base /aliases block leaves ethernet0 blank.  Without it U-Boot
+		 * cannot hand the EEPROM MAC to the kernel's GEM node, and systemd
+		 * cannot name the port end0 (the name the sentry networkd
+		 * configuration and the daemon's --net-if use), so it stays eth0.
+		 */
+		ethernet0 = "/axi/ethernet@f1a70000";
+		/* U-Boot (board/xilinx/common) reads the board MAC from nvmem* aliases. */
+		nvmem0 = &eeprom;
+	};
+};
+
+&i2c0 {
+        /* SCL bus speed: 100 kHz standard-mode (was incorrectly 160 MHz) */
+        xlnx,i2c-clk-freq-hz = <0x186A0>;
+        #address-cells = <1>;
+        #size-cells = <0>;
+        eeprom: eeprom@50 {
+                compatible = "atmel,24c128";
+                bootph-all;
+                reg = <0x50>;
+        };
+};
+
+&gpio0 {
+        status = "okay";
+};
+
+&mmi_dwc3 {
+        dr_mode = "host";
+        maximum-speed = "super-speed";
+        dma-coherent;
+        snps,dis_u2_susphy_quirk;
+        snps,dis_u3_susphy_quirk;
+        snps,usb3_lpm_capable;
+};
+
+
+&gem1 { /* PMC_MIO_48, LPD_MIO0-11/24/25 */
+ /*       phy-handle = <&phy1>; */
+        phy-mode = "rgmii-id";
+ /* MDIO doesnt work from ospi - so fixed link for now */
+ /*       mdio: mdio { */
+ /*               #address-cells = <1>; */
+ /*               #size-cells = <0>; */
+ /*               phy1: ethernet-phy@0 {  */
+ /*                       #phy-cells = <1>; */
+ /*                       compatible = "ethernet-phy-id2000.a231"; */
+ /*                       reg = <0>; */
+ /*                       ti,rx-internal-delay = <DP83867_RGMIIDCTL_3_00_NS>; */
+ /*                       ti,tx-internal-delay = <DP83867_RGMIIDCTL_2_75_NS>; */
+ /*                       ti,fifo-depth = <1>; */
+ /*                       ti,dp83867-rxctrl-strap-quirk; */
+ /*                       reset-assert-us = <100>; */
+ /*                       reset-deassert-us = <280>; */
+ /*                       reset-gpios = <&gpio0 25 GPIO_ACTIVE_LOW>; */
+ /*               }; */
+ /*        }; */
+        fixed-link { 
+                pause; 
+                full-duplex; 
+                speed = <1000>; 
+        };
+};
+
+
+&ospi { /* PMC_MIO0-10, MIO12 */
+        reset-names = "qspi";
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+	flash0: flash@0 {
+		compatible = "micron,mt35xu01gcba1g12", "micron,mt35xu01g", "jedec,spi-nor";
+		reg = <0>;
+		spi-tx-bus-width = <8>;
+		spi-rx-bus-width = <8>;
+		spi-max-frequency = <20000000>;
+		no-wp;
+		spi-nor,octal-dtr-enable;
+		boot,primary;
+	};
+};
+
+&mmi_10gbe {
+        status = "disabled";
+};
+
+&amba_pl {
+	telluride_drm {
+		compatible = "xlnx,aiarm";
+		status = "disabled";
+	};
+        // Using a flexible dummy sensor driver for CSI-2 connection
+        vid_capture_dummy_src_0: dummy_src_0@0 {
+                compatible = "xlnx,dummy_src";
+                clock-names = "ap_clk";
+                clocks = <&misc_clk_2>;
+                xlnx,max-height = <2160>;
+                xlnx,max-width = <8192>;
+                xlnx,ppc = <4>;
+                xlnx,s-axi-ctrl-addr-width = <8>;
+                xlnx,s-axi-ctrl-data-width = <32>;
+                ports {
+                        #address-cells = <1>;
+                        #size-cells = <0>;
+                        port@0 {
+                                reg = <0>;
+                                xlnx,video-format = <0>;
+                                xlnx,video-width = <8>;
+                                dummy_src0_out: endpoint {
+                                        remote-endpoint = <&csiss0_in>;
+                                };
+                        };
+                };
+	};
+};
+
+// ================================================================
+// DMA instances -- overlay on SDT-generated nodes (& syntax)
+//
+// The SDT already provides reg, clocks, xlnx,* properties.
+// We only add: compatible (our driver), interrupts (SDT has wrong
+// bit numbers), #dma-cells, and fwnode graph ports for upstream
+// subdev discovery.
+// ================================================================
+
+// DMA0 @ 0xB0000000
+&vcap_pipe2_axi4s_vid_dma_0 {
+	compatible = "sentry,erica-vid-dma", "xlnx,axi4s-vid-dma-1.0";
+	interrupts = <0xb 0x2>;
+	#dma-cells = <0x1>;
+	ports {
+		#address-cells = <1>;
+		#size-cells = <0>;
+		port@0 {
+			reg = <0>;
+			dma0_in: endpoint {
+				remote-endpoint = <&switch0_out0>;
+			};
+		};
+	};
+};
+
+// DMA1 @ 0xB0001000
+&vcap_pipe2_axi4s_vid_dma_1 {
+	compatible = "sentry,erica-vid-dma", "xlnx,axi4s-vid-dma-1.0";
+	interrupts = <0xc 0x2>;
+	#dma-cells = <0x1>;
+	ports {
+		#address-cells = <1>;
+		#size-cells = <0>;
+		port@0 {
+			reg = <0>;
+			dma1_in: endpoint {
+				remote-endpoint = <&switch0_out1>;
+			};
+		};
+	};
+};
+
+// DMA2 @ 0xB0002000
+&vcap_pipe2_axi4s_vid_dma_2 {
+	compatible = "sentry,erica-vid-dma", "xlnx,axi4s-vid-dma-1.0";
+	interrupts = <0xd 0x2>;
+	#dma-cells = <0x1>;
+	ports {
+		#address-cells = <1>;
+		#size-cells = <0>;
+		port@0 {
+			reg = <0>;
+			dma2_in: endpoint {
+				remote-endpoint = <&switch0_out2>;
+			};
+		};
+	};
+};
+
+// DMA3 @ 0xB0003000
+&vcap_pipe2_axi4s_vid_dma_3 {
+	compatible = "sentry,erica-vid-dma", "xlnx,axi4s-vid-dma-1.0";
+	interrupts = <0xe 0x2>;
+	#dma-cells = <0x1>;
+	ports {
+		#address-cells = <1>;
+		#size-cells = <0>;
+		port@0 {
+			reg = <0>;
+			dma3_in: endpoint {
+				remote-endpoint = <&switch0_out3>;
+			};
+		};
+	};
+};
+
+// ================================================================
+// Visualization DMA instances -- 1280x720 YUV420
+//
+// Fed from broadcaster M03 -> axi4s_down_scale_csc -> DMA
+// (standalone capture devices, not part of V4L2 media graph)
+// ================================================================
+
+// Viz DMA4 @ 0xB0008000  (CH0 visualization)
+&vcap_pipe2_axi4s_vid_dma_4 {
+	compatible = "sentry,erica-vid-dma", "xlnx,axi4s-vid-dma-1.0";
+	interrupts = <0x10 0x2>;
+	#dma-cells = <0x1>;
+};
+
+// Viz DMA5 @ 0xB0009000  (CH1 visualization)
+&vcap_pipe2_axi4s_vid_dma_5 {
+	compatible = "sentry,erica-vid-dma", "xlnx,axi4s-vid-dma-1.0";
+	interrupts = <0xf 0x2>;
+	#dma-cells = <0x1>;
+};
+
+// Viz DMA6 @ 0xB000A000  (CH2 visualization)
+&vcap_pipe2_axi4s_vid_dma_6 {
+	compatible = "sentry,erica-vid-dma", "xlnx,axi4s-vid-dma-1.0";
+	interrupts = <0x11 0x2>;
+	#dma-cells = <0x1>;
+};
+
+// Viz DMA7 @ 0xB000B000  (CH3 visualization)
+&vcap_pipe2_axi4s_vid_dma_7 {
+	compatible = "sentry,erica-vid-dma", "xlnx,axi4s-vid-dma-1.0";
+	interrupts = <0x12 0x2>;
+	#dma-cells = <0x1>;
+};
+
+// Set the CSI-2 RX to use YUV422 video format
+// This is DPHY 0 on IOB
+&vcap_pipe2_mipi_csi2_rx_subsyst_0 {
+	xlnx,csi-pxl-format = <0x1e>; //YUV
+        status = "okay";
+	video-reset-gpios = <&axi_gpio_rst 0xa 0x1>;
+        interrupts = <0xa 0x2>;
+	ports {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		port@0 {
+			reg = <0>;
+
+			xlnx,video-format = <0>;
+			xlnx,video-width = <8>;
+
+			csiss0_in: endpoint {
+				data-lanes = <1 2 3 4>;
+				remote-endpoint = <&dummy_src0_out>;
+			};
+		};
+		port@1 {
+			reg = <1>;
+
+			xlnx,video-format = <0>;
+			xlnx,video-width = <8>;
+
+			csiss0_out: endpoint {
+				remote-endpoint = <&switch0_in0>;
+			};
+		};
+	};
+
+};
+
+// Axis switch -- SDT does not generate compatible, clocks, or routing props
+&vcap_pipe2_axis_switch_0 {
+	compatible = "xlnx,axis-switch-1.1";
+	xlnx,routing-mode = <0x0>;
+	xlnx,num-si-slots = <0x1>;
+	xlnx,num-mi-slots = <0x4>;
+	clock-names = "aclk";
+	clocks = <&misc_clk_2>;
+	ports {
+	#address-cells = <1>;
+	#size-cells = <0>;
+		port@0 {
+			reg = <0>;
+			xlnx,video-format = <0>;
+			xlnx,video-width = <8>;
+			switch0_in0: endpoint {
+				remote-endpoint = <&csiss0_out>;
+			};
+		};
+		port@1 {
+			reg = <1>;
+			xlnx,video-format = <0>;
+			xlnx,video-width = <8>;
+			switch0_out0: endpoint {
+				remote-endpoint = <&dma0_in>;
+			};
+		};
+		port@2 {
+			reg = <2>;
+			xlnx,video-format = <0>;
+			xlnx,video-width = <8>;
+			switch0_out1: endpoint {
+				remote-endpoint = <&dma1_in>;
+			};
+		};
+                port@3 {
+			reg = <3>;
+			xlnx,video-format = <0>;
+			xlnx,video-width = <8>;
+			switch0_out2: endpoint {
+				remote-endpoint = <&dma2_in>;
+			};
+		};
+                port@4 {
+			reg = <4>;
+			xlnx,video-format = <0>;
+			xlnx,video-width = <8>;
+			switch0_out3: endpoint {
+				remote-endpoint = <&dma3_in>;
+			};
+		};
+	};
+
+};
+
+
+// ================================================================
+// VCU -- the SDT mis-maps these interrupts.
+//
+// bd.tcl truth, identical on all four machines: vcu/irq_enc -> concat In8 and
+// vcu/irq_dec -> In7, and that concat drives axi_intc_0.  The SDT instead
+// parents them to &gic while keeping the INTC line number, so 8 lands in the
+// GIC's 3-cell "type" slot (valid values 0=SPI, 1=PPI) and the mapping is
+// rejected: "IRQ index 0 not found", probe -EINVAL, no encoder.
+// ================================================================
+// OWNERSHIP: the R52 VCU controller drives the Allegro encoder MCU directly
+// through the NSU, and only one master may own that MCU.  Disabled here so
+// Linux's al_riscv never binds, matching the other three sentry machines --
+// all four are meant to behave identically from a VCU/NPU perspective.
+// Nothing in the sentry stack decodes on the A78, so the decoder goes too.
+&encoder {
+	interrupt-parent = <&axi_intc_0>;
+	interrupts = <0x8 0x4>;
+	/* Without this the driver falls back to CMA and the encoder MCU never
+	 * starts ("MCU 0: Failed to start"); the decoder only works because the
+	 * SDT already gives it this pool.  Kept even while disabled so re-enabling
+	 * is a one-line change. */
+	memory-region = <&shared_dma_reserved>;
+	status = "disabled";
+};
+// The DECODER is enabled while the encoder above stays disabled. Only the
+// encoder MCU is contended: the R52 VCU controller drives it through the NSU
+// and one master must own it. The decoder is a separate block -- ald3xx at
+// 0xE8080000, compatible "al,ald3xx", its own mcu-clk, no shared reset or
+// power-domain -- that the R52 never touches.
+//
+// It is enabled because the A78 deterrent player decodes H.264 through
+// GStreamer omxh264dec, which opens /dev/al_d3xx. That node comes from THIS
+// block (al,devicename = "al_d3xx"); the encoder's is "al_e2xx". With the
+// decoder disabled omxh264dec fails with "Failed to create context" and the
+// player silently falls back to software decode, which is the dominant CPU
+// cost of running deterrent mode.
+&decoder {
+	interrupt-parent = <&axi_intc_0>;
+	interrupts = <0x7 0x4>;
+	memory-region = <&shared_dma_reserved>;
+	status = "okay";
+};
+
+// AI Engine aperture: fix power-domains phandle (SDT generates wrong reference)
+// and override interrupt mapping
+&aie_aperture_0 {
+	interrupts = <0x00 0xce 0x04 0x00 0xcf 0x04 0x00 0xd0 0x04>;
+};
+
+// ================================================================
+// Keep Linux off the AI Engine: it fights the R52 for GIC SPI 206/207/208.
+//
+// aie_aperture_0 above maps AIE NPI SPIs 206/207/208 as Linux interrupts, and
+// the R52_0 AIE manager claims the SAME lines:
+//     rpu_fw_sentry/app/src/hal/aie2ps.c
+//         #define AIE2PS_NPI_ERR_SPI 206   // GIC IRQ 238
+//         #define AIE2PS_NPI_USR_SPI 207   // GIC IRQ 239
+//
+// With ai_engine_0 enabled, xilinx-ai-engine probes on the A78 and requests
+// those same SPIs, so Linux and the R52 both own them.
+//
+// Diagnosed on vek385-imx623 (2026-09-09), applied to both vek385 machines in
+// 296e4e6, and applied here because this board runs the same R52 AIE manager
+// against the same NPI SPIs.  Nothing on the A78 needs the node -- the HSA
+// image is staged via /dev/mem over the npu_pool no-map carveout and the
+// manager is booted through remoteproc.
+//
+// The array itself is NOT in FPD (it is the ME2 domain on PM_POWER_VCCINT_ME),
+// so disabling the Linux node does not risk leaving it unpowered.
+// ================================================================
+&ai_engine_0 {
+	status = "disabled";
+};
+
+// ================================================================
+// RTC calibration.  The SDT emits no `calibration` on the Linux rtc node, so
+// zynqmp-rtc leaves CALIB_WRITE at the ROM default 0x10010 = 17 ticks/second
+// -> the seconds counter runs at 32768/17 = 1928 Hz instead of 1 Hz, and every
+// R52 alarm delay is meaningless.  0x7fff = 32768 ticks = 1 Hz, matching the
+// value already present in the cortexr52-1 baremetal view of the same node.
+// ================================================================
+&rtc {
+	calibration = <0x7fff>;
+};
+
+// Sentry drives one SST stream; the driver treats any xlnx,mst-mode-en value, <0> included, as MST enabled, so the property must be absent.
+&mmi_dptx {
+	/delete-property/ xlnx,mst-mode-en;
+};
+
+// ================================================================
+// IPI wakeup-source — enables suspend-to-RAM wake via R52 doorbell
+// Without this, only s2idle (WFI) works, not full S2RAM power-down.
+//
+// Also add RPU (ipi-id=3) as a mailbox child so the Linux
+// zynqmp-ipi-mailbox driver unmasks bit 3 in APU's IPI IMR.
+// Without this, RPU doorbell sets APU ISR but the SPI output
+// stays low (masked) and GIC Wakeup Controller never fires.
+// R52 firmware also unmasks bit 3 directly as belt-and-suspenders.
+// ================================================================
+&{/zynqmp-ipi} {
+	wakeup-source;
+
+	// RPU IPI mailbox — allows R52 doorbell wake from deep suspend
+	// Buffer addresses: RPU(ch3)->APU(ch2) request = 0xEB3F0680
+	//                   APU(ch2)->RPU(ch3) request = 0xEB3F04C0
+	mailbox@eb3f0680 {
+		reg = <0x00 0xeb3f04c0 0x00 0x20
+		       0x00 0xeb3f04e0 0x00 0x20
+		       0x00 0xeb3f0680 0x00 0x20
+		       0x00 0xeb3f06a0 0x00 0x20>;
+		reg-names = "local_request_region",
+			    "local_response_region",
+			    "remote_request_region",
+			    "remote_response_region";
+		#mbox-cells = <0x01>;
+		xlnx,ipi-id = <0x03>;
+	};
+};
+
+// ================================================================
+// Remoteproc — R52 baremetal firmware loading via Linux remoteproc
+//
+// The RAVE2 base cortexa78-linux.dts (from SDT) does NOT include
+// a remoteproc node, so we must define the full node here.
+//
+// Address 0xEBA00000 = R52 cluster A, core 0 (r52_0a, ps11_0_cortexr52_0).
+// This matches the VEK385 base DTS remoteproc@eba00000 but with
+// memory-region pointing to our sentry firmware carveout at 0x50000000.
+//
+// Power-domain IDs match the Versal Gen 2 silicon (same as VEK385):
+//   0x181100bf = PM_DEV_RPU_A_0 (R52 cluster A, core 0)
+//   0x183180cb = PM_DEV_TCM_A_0A (ATCM)
+//   0x183180cc = PM_DEV_TCM_A_0B (BTCM)
+//   0x183180cd = PM_DEV_TCM_A_0C (CTCM)
+//
+// Usage from Linux:
+//   cp sentry_r52.elf /lib/firmware/
+//   echo sentry_r52.elf > /sys/class/remoteproc/remoteproc0/firmware
+//   echo start > /sys/class/remoteproc/remoteproc0/state
+// ================================================================
+/ {
+	/* TCM reserved-memory for R52 core 0 (remoteproc driver needs these) */
+	reserved-memory {
+		#address-cells = <0x2>;
+		#size-cells = <0x2>;
+		ranges;
+
+		tcm_r52_0: r52_0_tcm@eba00000 {
+			no-map;
+			reg = <0x00 0xeba00000 0x00 0x30000>;  /* 192KB: ATCM+BTCM+CTCM */
+		};
+	};
+
+	remoteproc@eba00000 {
+		compatible = "xlnx,versal-net-r52fss";
+		#address-cells = <0x02>;
+		#size-cells = <0x02>;
+		xlnx,cluster-mode = <0x00>;
+		ranges = <0x00 0x00 0x00 0xeba00000 0x00 0x10000
+			  0x00 0x10000 0x00 0xeba10000 0x00 0x8000
+			  0x00 0x18000 0x00 0xeba20000 0x00 0x8000>;
+
+		r52f@0 {
+			compatible = "xlnx,versal2-r52f";
+			power-domains = <&versal2_firmware 0x181100bf>,
+					<&versal2_firmware 0x183180cb>,
+					<&versal2_firmware 0x183180cc>,
+					<&versal2_firmware 0x183180cd>;
+			reg = <0x00 0x00 0x00 0x10000
+			       0x00 0x10000 0x00 0x8000
+			       0x00 0x18000 0x00 0x8000>;
+			reg-names = "r52_0a_atcm_global@eba00000",
+				    "r52_0a_btcm_global@eba10000",
+				    "r52_0a_ctcm_global@eba20000";
+			memory-region = <&aie_mgr_fw>, <&r52_firmware>;  /* AIE manager first: R52_0 runs it, not the detection ELF */
+		};
+	};
+};
+
+// ---------------------------------------------------------------
+// Encoder source frames. On the imx623 machines this is the ISP's limo_buf;
+// the xylon pipeline has no ISP, so the 1928x1208 NV12 writers are pointed
+// here instead. The address is what the R52 firmware expects
+// (VCU2_SRC_EXTERN_BASE), 32 MB per channel x 4.
+// ---------------------------------------------------------------
+/ {
+	reserved-memory {
+		#address-cells = <0x2>;
+		#size-cells = <0x2>;
+		ranges;
+
+		codec_src_buffers: codec_src_buf@28000000 {
+			reg = <0x0 0x28000000 0x0 0x08000000>;  /* 128 MB: 4 x 32 MB encoder source slots */
+			no-map;
+		};
+
+		/* Coded pre-roll ring, written by the VCU2 encoder itself. The R52 is
+		 * deliberately excluded from this segment and never touches the
+		 * bitstream; only the A78 reads it. */
+		/*
+		 * Split by the encoder's channel plan (ERICA-E_rpu_vcu_sw vcu2_plan.h); the
+		 * node itself is the same for every plan.
+		 *   four camera channels only:  4 x 160 MB rings, 256 KB slots
+		 *   plans with lower rungs:     +0x00000000  4 x 128 MB camera rings, 256 KB slots
+		 *                               +0x20000000  4 x 16 MB lower-rung rings, 64 KB slots
+		 *                               +0x24000000  64 MB source slots of the frames the
+		 *                                            A78 composes (A78 writes, VCU2 reads)
+		 */
+		codec_preroll: codec_preroll@82c000000 {
+			reg = <0x8 0x2c000000 0x0 0x28000000>;  /* 640 MB @ 0x82c000000: VCU2 coded access units */
+			no-map;
+		};
+	};
+};
+
+// ================================================================
+// RPU-driven VCU2 codec: R52_1 controller + its working memory.
+//
+// Mirrors rave2-imx623-sentry. Everything the 32-bit R52 has to address is in
+// low DDR; the coded access units are NOT -- the encoder DMAs those straight
+// into codec_preroll in high DDR, which the R52 cannot reach and never needs to.
+//
+// The two fixed addresses come from the firmware (vcu2_encoder.c):
+//   VCU2_SRC_EXTERN_BASE  0x28000000
+//   VCU2_STREAM_HIGH_BASE 0x8_2C000000
+// ================================================================
+/ {
+	reserved-memory {
+		#address-cells = <0x2>;
+		#size-cells = <0x2>;
+		ranges;
+
+		/* TCM for R52_1 (r52_0b, RPU B0) so remoteproc reserves the ATCM+BTCM+CTCM window. */
+		tcm_r52_1: r52_1_tcm@eba80000 {
+			no-map;
+			reg = <0x00 0xeba80000 0x00 0x30000>;  /* 192KB: ATCM+BTCM+CTCM */
+		};
+
+		/* DDR carveout for the R52_1 VCU-controller ELF (sentry-vcu-ctrl.elf).
+		 * The Zephyr image links at 0x30000 with a ~2.9 MB footprint, so the
+		 * carveout must cover 0x30000; 4 MB there. */
+		r52_1_firmware: r52_1_fw@30000 {
+			reg = <0x0 0x00030000 0x0 0x00400000>;  /* 4 MB */
+			no-map;
+		};
+
+		/* 32 MB, not 8: ale2xx.fw links vaddr 0xC0000000..0xC2000000 and puts the
+		 * H2M/M2H mailboxes near the top (+0x1FFB000), so a shorter window would
+		 * put the mailbox rings inside the CMA carveout. */
+		vcu2_fw: vcu2_fw@30000000 {
+			reg = <0x0 0x30000000 0x0 0x02000000>;  /* 32 MB: FW image + H2M/M2H mailbox */
+			no-map;
+		};
+
+		/* Overlaps the tail of vcu2_fw on purpose: the firmware allocator starts
+		 * at 0x32000000, and drawing this node wider keeps 0x30000000..0x388900FF
+		 * no-map in one piece. Two no-map nodes overlapping is harmless. */
+		vcu2_cma: vcu2_cma@32000000 {
+			reg = <0x0 0x32000000 0x0 0x06800000>;  /* 104 MB: CtrlSW CMA + bitstream out.
+						 * Base/size MUST match VCU2_CMA_PHYS/VCU2_CMA_SIZE in
+						 * r52-vcu-ctrl/examples/vcu2_app_example.c.  Starts where
+						 * vcu2_fw ends (0x32000000) and ends exactly at
+						 * vcu2_preroll_shared (0x38800000). */
+			no-map;
+		};
+
+		/*
+		 * Encoder controller <-> A78 structures (ERICA-E_rpu_vcu_sw include/):
+		 *   0x38800000  VPRL pre-roll ring header, up to 8 channels  (vcu2_preroll.h)
+		 *   0x38820000  submit ring 1, camera frames                 (vcu2_submit.h)
+		 *   0x38830000  SDIR source directory, 8 channels x 7 slots
+		 *   0x38840000  submit ring 2, frames the A78 composes
+		 *   0x38848000  VCHM encoder channel map                     (vcu2_chmap.h)
+		 *   0x3884A000  SGEN source-slot generations
+		 *   0x38890000  controller debug words
+		 * A controller restart clears 0x38820000..0x3889FFFF.
+		 */
+		vcu2_preroll_shared: vcu2_preroll_shared@38800000 {
+			reg = <0x0 0x38800000 0x0 0x00100000>;  /* 1 MB: A78-visible pre-roll header */
+			no-map;
+		};
+
+		/*
+		 * NoC remap shadow -- this is NOT usable memory.
+		 *
+		 * bd.tcl sets CONFIG.REMAPS {M00_INI {{0x0_4000_0000 0x0_0200_0000_0000
+		 * 0x10000000}}} on Master_NoC/M00_INI, the port that feeds ai_engine_0.
+		 * Master_NoC/S08_AXI is ps_wizard_0/LPD_AXI_NOC0, so every LPD master -- gem1,
+		 * USB, ADMA -- shares the R52s' remapped view: physical
+		 * 0x40000000..0x4FFFFFFF reaches the AIE array, not DDR.
+		 *
+		 * Only the R52s are meant to use it.  They are exclude_bd_addr_seg'd from the
+		 * AIE aperture at 0x200_0000_0000 (a 32-bit core cannot reach 2 TB), so this
+		 * 256 MB alias is their only path to the array -- it is what the AIE manager
+		 * firmware means by RPUFW_AIE2PS_BASE_ADDR=0x40000000.
+		 *
+		 * The A78 is NOT remapped and still sees real DRAM here.  That asymmetry is
+		 * the hazard: a DMA buffer the kernel hands gem1 in this range is written by
+		 * the CPU into DDR and fetched by the MAC out of the AIE.  The link comes up
+		 * and passes no traffic.
+		 *
+		 * Verified by A/B on rave2-imx623 hardware 2026-08-31: booting a DTB with this
+		 * node removed and cma=256M (so the default CMA lands on the window) gave no
+		 * ping at all; restoring the node gave end0 up with 0 rx/tx errors.
+		 *
+		 * Consequences to keep in sync:
+		 *   - `cma=` must fit a hole that is NOT this window (see chosen{} above).
+		 *   - U-Boot fdt_addr_r must not point here, or lmb refuses every load and
+		 *     the board dies with "Could not find a valid device tree".
+		 *   - Must track the bd.tcl REMAPS window, base AND size.
+		 */
+		aie_remap_shadow: aie_remap_shadow@40000000 {
+			reg = <0x0 0x40000000 0x0 0x10000000>;  /* 256 MB */
+			no-map;
+		};
+
+
+		/* A78 <-> R52 AIE-manager shared-memory rings (no-map: the R52 and
+		 * the A78 client map it directly; keep Linux allocators out).
+		 * 2 clients x 0x18000: apu0_client @0xBBE00000, apu1_client @0xBBE18000
+		 * (shmem_clients_cfg[] in the FW's shmem_platform.c). Each client is
+		 * 3 x 32 KB: mgmt-rx, mgmt-tx, doorbell. OCM bank 2 is 0xBBE00000. */
+		rpu_aie_shmem: rpu_aie_shmem@bbe00000 {
+			no-map;
+			reg = <0x0 0xBBE00000 0x0 0x30000>;     /* 192 KB (2 clients) */
+		};
+
+		/* AIE-manager firmware window for R52_0 (remoteproc@eba00000).
+		 *
+		 * The stock telluride rpu_fw links at 0x30000, which collides with
+		 * r52_1_fw@30000 (sentry-vcu-ctrl.elf on R52_1) since both cores run
+		 * concurrently. Our build relinks the image to 0x800000 via
+		 * rpu_fw_sentry/sentry.overlay (&ddr_firmware) and keeps the
+		 * reference's stock addresses for everything else, so this one window
+		 * covers the lot:
+		 *   0x430000  256 KB  dram_log_buf
+		 *   0x470000  256 B   rsctbl        <- ELF LOAD segment
+		 *   0x478000  288 KB  rpmsg_shmem   (unused, CONFIG_OPENAMP=n)
+		 *   0x4C0000  3 MB    host_gem_carveout
+		 *   0x800000  4 MB    firmware image <- ELF LOAD segments
+		 */
+		aie_mgr_fw: aie_mgr_fw@430000 {
+			no-map;
+			reg = <0x0 0x00430000 0x0 0x007D0000>;  /* 7.8 MB, ends 0x00C00000 */
+		};
+
+	};
+
+	/* R52_1 is RPU cluster B core 0 (MPIDR 0x100, SMID 0x202); the core and
+	 * its TCMs must belong to the same RPU.  The PLM powers up and releases
+	 * the reset of whichever core owns a requested TCM bank, so requesting
+	 * TCM_A_1x here brings RPU A core 1 up running from an empty TCM: it
+	 * slides into this firmware at 0x30000 and writes over R52_1's stacks
+	 * with SMID 0x201.  The firmware does not use its TCMs; the driver
+	 * requires at least one bank per core. */
+	remoteproc@eba80000 {
+		compatible = "xlnx,versal-net-r52fss";
+		#address-cells = <0x02>;
+		#size-cells = <0x02>;
+		xlnx,cluster-mode = <0x00>;
+		ranges = <0x00 0x00 0x00 0xeba80000 0x00 0x10000
+			  0x00 0x10000 0x00 0xeba90000 0x00 0x8000
+			  0x00 0x18000 0x00 0xebaa0000 0x00 0x8000>;
+
+		r52f@0 {
+			compatible = "xlnx,versal2-r52f";
+			power-domains = <&versal2_firmware 0x181100c1>,	/* PM_DEV_RPU_B_0 */
+					<&versal2_firmware 0x183180d1>,	/* PM_DEV_TCM_B_0A */
+					<&versal2_firmware 0x183180d2>,	/* PM_DEV_TCM_B_0B */
+					<&versal2_firmware 0x183180d3>;	/* PM_DEV_TCM_B_0C */
+			reg = <0x00 0x00 0x00 0x10000
+			       0x00 0x10000 0x00 0x8000
+			       0x00 0x18000 0x00 0x8000>;
+			reg-names = "r52_0b_atcm_global@eba80000",
+				    "r52_0b_btcm_global@eba90000",
+				    "r52_0b_ctcm_global@ebaa0000";
+			memory-region = <&r52_1_firmware>, <&r52_firmware>;  /* + the 0x50000000 window: sentry_r52_*.elf links there, sentry-vcu-ctrl.elf at 0x30000 */
+		};
+	};
+};

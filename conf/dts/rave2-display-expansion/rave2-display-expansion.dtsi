@@ -1,0 +1,710 @@
+// Copyright © Advanced Micro Devices, Inc., or its affiliates. All rights reserved.
+// Copyright (C) 2015-2024 Texas Instruments Incorporated - https://www.ti.com/
+// Modifications Copyright(C) 2026 Advanced Micro Devices, Inc. All rights reserved.
+// SPDX-License-Identifier: MIT AND BSD-2-Clause
+// Contributors: KC
+// Maintainer: KC
+// DP83867 constants copied from Linux include/dt-bindings/net/ti-dp83867.h
+// (GPL-2.0-only OR MIT); MIT selected. GPIO_ACTIVE_LOW copied from
+// include/dt-bindings/gpio/gpio.h (GPL-2.0 OR BSD-2-Clause); BSD-2-Clause selected.
+#define DP83867_RGMIIDCTL_250_PS        0x0
+#define DP83867_RGMIIDCTL_500_PS        0x1
+#define DP83867_RGMIIDCTL_750_PS        0x2
+#define DP83867_RGMIIDCTL_1_NS          0x3
+#define DP83867_RGMIIDCTL_1_25_NS       0x4
+#define DP83867_RGMIIDCTL_1_50_NS       0x5
+#define DP83867_RGMIIDCTL_1_75_NS       0x6
+#define DP83867_RGMIIDCTL_2_00_NS       0x7
+#define DP83867_RGMIIDCTL_2_25_NS       0x8
+#define DP83867_RGMIIDCTL_2_50_NS       0x9
+#define DP83867_RGMIIDCTL_2_75_NS       0xa
+#define DP83867_RGMIIDCTL_3_00_NS       0xb
+#define DP83867_RGMIIDCTL_3_25_NS       0xc
+#define DP83867_RGMIIDCTL_3_50_NS       0xd
+#define DP83867_RGMIIDCTL_3_75_NS       0xe
+#define DP83867_RGMIIDCTL_4_00_NS       0xf
+
+#define   DP83867_PHYCR_FIFO_DEPTH_4_B_NIB  0x01
+#define   GPIO_ACTIVE_LOW 1
+
+
+
+/ {
+        model = "RAVE2 Baseline - AMD Versal Gen 2";
+	compatible = "amd,versal2";
+	chosen {
+		stdout-path = "serial0:115200n8";
+		bootargs = "earlycon=pl011,mmio32,0xf1920000 console=ttyAMA0,115200";
+		xen_bootargs = "console=dtuart dtuart=serial0 dom0_mem=1000M dom0_max_vcpus=1 bootscrub=0 vwfi=native";
+		dom0_bootargs = "console=hvc0 earlycon=xen earlyprintk=xen clk_ignore_unused";
+	};
+
+	reserved-memory {
+		#address-cells = <0x2>;
+		#size-cells = <0x2>;
+		ranges;
+
+		/delete-node/ cma_reserved@800000000;
+		// Used to reserve memory for VCU
+		shared_dma_reserved: shared_dma_mem_region {
+			compatible = "shared-dma-pool";
+			reg = <0x8 0x0 0x1 0x40000000>;
+			linux,cma-default;
+			reusable;
+		};
+
+		//npu_dma_reserved: npup_dma_mem_region {
+		//	compatible = "shared-dma-pool";
+		//	size = <0x0 0x60000000>;
+		//	alloc-ranges = <0x500 0x0 0x0 0x80000000>;
+		//	no-map;
+		//};
+
+	};
+
+        aliases {
+		spi0 = "/axi/spi@f1010000";
+    spi1 = "/axi/spi@f19d0000";
+		nvmem0 = &eeprom;
+	};
+};
+
+&gpio0 {
+        status = "okay";
+};
+
+&mmi_dwc3 {
+        dr_mode = "host";
+        maximum-speed = "super-speed-plus";
+        dma-coherent;
+        snps,dis_u2_susphy_quirk;
+        snps,dis_u3_susphy_quirk;
+        snps,usb3_lpm_capable;
+};
+
+
+&gem1 { /* PMC_MIO_48, LPD_MIO0-11/24/25 */
+ /*       phy-handle = <&phy1>; */
+        phy-mode = "rgmii-id";
+ /* MDIO doesnt work from ospi - so fixed link for now */
+ /*       mdio: mdio { */
+ /*               #address-cells = <1>; */
+ /*               #size-cells = <0>; */
+ /*               phy1: ethernet-phy@0 {  */
+ /*                       #phy-cells = <1>; */
+ /*                       compatible = "ethernet-phy-id2000.a231"; */
+ /*                       reg = <0>; */
+ /*                       ti,rx-internal-delay = <DP83867_RGMIIDCTL_3_00_NS>; */
+ /*                       ti,tx-internal-delay = <DP83867_RGMIIDCTL_2_75_NS>; */
+ /*                       ti,fifo-depth = <1>; */
+ /*                       ti,dp83867-rxctrl-strap-quirk; */
+ /*                       reset-assert-us = <100>; */
+ /*                       reset-deassert-us = <280>; */
+ /*                       reset-gpios = <&gpio0 25 GPIO_ACTIVE_LOW>; */
+ /*               }; */
+ /*        }; */
+        fixed-link { 
+                pause; 
+                full-duplex; 
+                speed = <1000>; 
+        };
+};
+
+&mmi_10gbe { /* 10GbE direct to switch, no PHY */
+        phy-mode = "10gbase-r";
+        fixed-link {
+                speed = <10000>;
+                full-duplex;
+        };
+};
+
+
+&ospi { /* PMC_MIO0-10, MIO12 */
+        reset-names = "qspi";
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+	flash0: flash@0 {
+		compatible = "micron,mt35xu01gcba1g12", "micron,mt35xu01g", "jedec,spi-nor";
+		reg = <0>;
+		spi-tx-bus-width = <8>;
+		spi-rx-bus-width = <8>;
+		spi-max-frequency = <20000000>;
+		no-wp;
+		spi-nor,octal-dtr-enable;
+		boot,primary;
+	};
+};
+
+&i2c0 {
+        eeprom: eeprom@50 {
+                compatible = "atmel,24c128";
+                bootph-all;
+                reg = <0x50>;
+        };
+};
+
+&amba_pl {
+
+        // Using a flexible dummy sensor driver for CSI-2 connection
+        vid_capture_dummy_src_0: dummy_src_0@0 {
+                compatible = "xlnx,dummy_src";
+                clock-names = "ap_clk";
+                clocks = <&misc_clk_2>;
+                xlnx,max-height = <2160>;
+                xlnx,max-width = <8192>;
+                xlnx,ppc = <4>;
+                xlnx,s-axi-ctrl-addr-width = <8>;
+                xlnx,s-axi-ctrl-data-width = <32>;
+                ports {
+                        #address-cells = <1>;
+                        #size-cells = <0>;
+                        port@0 {
+                                reg = <0>;
+                                xlnx,video-format = <0>;
+                                xlnx,video-width = <8>;
+                                dummy_src0_out: endpoint {
+                                        remote-endpoint = <&csiss0_in>;
+                                };
+                        };
+                };
+	};
+
+        // This is to enable the /dev/videoX V4L2 interfaces
+        axi_video_cap0 {
+                compatible = "xlnx,video";
+                dmas = <&vcap_pipe2_v_frmbuf_wr_0 0>,<&vcap_pipe2_v_frmbuf_wr_1 0>,<&vcap_pipe2_v_frmbuf_wr_2 0>,<&vcap_pipe2_v_frmbuf_wr_3 0>;
+                dma-names = "port0","port1","port2","port3";
+
+                ports {
+                        #address-cells = <1>;
+                        #size-cells = <0>;
+                        port@0 {
+                                reg = <0>;
+                                direction = "input";
+                                vcap0_in0: endpoint {
+                                        remote-endpoint = <&switch0_out0>;
+                                };
+                        };
+                        port@1 {
+                                reg = <1>;
+                                direction = "input";
+                                vcap0_in1: endpoint {
+                                        remote-endpoint = <&switch0_out1>;
+                                };
+                        };
+                        port@2 {
+                                reg = <2>;
+                                direction = "input";
+                                vcap0_in2: endpoint {
+                                        remote-endpoint = <&switch0_out2>;
+                                };
+                        };
+                        port@3 {
+                                reg = <3>;
+                                direction = "input";
+                                vcap0_in3: endpoint {
+                                        remote-endpoint = <&switch0_out3>;
+                                };
+                        };
+                };
+        };
+
+
+        // Using a flexible dummy sensor driver for CSI-2 connection
+        vid_capture_dummy_src_1: dummy_src_1@0 {
+                compatible = "xlnx,dummy_src";
+                clock-names = "ap_clk";
+                clocks = <&misc_clk_2>;
+                xlnx,max-height = <2160>;
+                xlnx,max-width = <8192>;
+                xlnx,ppc = <4>;
+                xlnx,s-axi-ctrl-addr-width = <8>;
+                xlnx,s-axi-ctrl-data-width = <32>;
+                ports {
+                        #address-cells = <1>;
+                        #size-cells = <0>;
+                        port@0 {
+                                reg = <0>;
+                                xlnx,video-format = <0>;
+                                xlnx,video-width = <8>;
+                                dummy_src1_out: endpoint {
+                                        remote-endpoint = <&csiss1_in>;
+                                };
+                        };
+                };
+	};
+
+        // This is to enable the /dev/videoX V4L2 interfaces
+        axi_video_cap1 {
+                compatible = "xlnx,video";
+                dmas = <&vcap_pipe3_v_frmbuf_wr_0 0>,<&vcap_pipe3_v_frmbuf_wr_1 0>,<&vcap_pipe3_v_frmbuf_wr_2 0>,<&vcap_pipe3_v_frmbuf_wr_3 0>;
+                dma-names = "port0","port1","port2","port3";
+
+                ports {
+                        #address-cells = <1>;
+                        #size-cells = <0>;
+                        port@0 {
+                                reg = <0>;
+                                direction = "input";
+                                vcap1_in0: endpoint {
+                                        remote-endpoint = <&switch1_out0>;
+                                };
+                        };
+                        port@1 {
+                                reg = <1>;
+                                direction = "input";
+                                vcap1_in1: endpoint {
+                                        remote-endpoint = <&switch1_out1>;
+                                };
+                        };
+                        port@2 {
+                                reg = <2>;
+                                direction = "input";
+                                vcap1_in2: endpoint {
+                                        remote-endpoint = <&switch1_out2>;
+                                };
+                        };
+                        port@3 {
+                                reg = <3>;
+                                direction = "input";
+                                vcap1_in3: endpoint {
+                                        remote-endpoint = <&switch1_out3>;
+                                };
+                        };
+                };
+        };
+
+	// Using a flexible dummy sensor driver for CSI-2 connection
+        vid_capture_dummy_src_2: dummy_src_2@0 {
+                compatible = "xlnx,dummy_src";
+                clock-names = "ap_clk";
+                clocks = <&misc_clk_2>;
+                xlnx,max-height = <2160>;
+                xlnx,max-width = <8192>;
+                xlnx,ppc = <4>;
+                xlnx,s-axi-ctrl-addr-width = <8>;
+                xlnx,s-axi-ctrl-data-width = <32>;
+                ports {
+                        #address-cells = <1>;
+                        #size-cells = <0>;
+                        port@0 {
+                                reg = <0>;
+                                xlnx,video-format = <0>;
+                                xlnx,video-width = <8>;
+                                dummy_src2_out: endpoint {
+                                        remote-endpoint = <&csiss2_in>;
+                                };
+                        };
+                };
+	};
+
+        // This is to enable the /dev/videoX V4L2 interfaces
+        axi_video_cap2 {
+                compatible = "xlnx,video";
+                dmas = <&vcap_pipe1_v_frmbuf_wr_0 0>,<&vcap_pipe1_v_frmbuf_wr_1 0>,<&vcap_pipe1_v_frmbuf_wr_2 0>,<&vcap_pipe1_v_frmbuf_wr_3 0>;
+                dma-names = "port0","port1","port2","port3";
+
+                ports {
+                        #address-cells = <1>;
+                        #size-cells = <0>;
+                        port@0 {
+                                reg = <0>;
+                                direction = "input";
+                                vcap2_in0: endpoint {
+                                        remote-endpoint = <&switch2_out0>;
+                                };
+                        };
+                        port@1 {
+                                reg = <1>;
+                                direction = "input";
+                                vcap2_in1: endpoint {
+                                        remote-endpoint = <&switch2_out1>;
+                                };
+                        };
+                        port@2 {
+                                reg = <2>;
+                                direction = "input";
+                                vcap2_in2: endpoint {
+                                        remote-endpoint = <&switch2_out2>;
+                                };
+                        };
+                        port@3 {
+                                reg = <3>;
+                                direction = "input";
+                                vcap2_in3: endpoint {
+                                        remote-endpoint = <&switch2_out3>;
+                                };
+                        };
+                };
+        };
+
+	msix_gpio: gpio@80000005000 {
+		compatible = "xlnx,xps-gpio-1.00.a";
+		reg = <0x800 0x5000 0x0 0x1000>;
+		#gpio-cells = <2>;
+		gpio-controller;
+		xlnx,all-outputs = <1>;
+		xlnx,gpio-width = <2>;
+		xlnx,dout-default = <0x0>;
+	};
+
+	gic_gpio: gpio@80000004000 {
+		compatible = "xlnx,xps-gpio-1.00.a";
+		reg = <0x800 0x4000 0x0 0x1000>;
+		#gpio-cells = <2>;
+		gpio-controller;
+		xlnx,all-outputs = <1>;
+		xlnx,gpio-width = <2>;
+		xlnx,dout-default = <0x0>;
+	};
+
+	rave_mq: mq@80000000000 {
+		compatible = "amd,rave-message-queue-1.0";
+		reg = <0x800 0x0 0x0 0x2000>, <0x800 0x2000 0x0 0x2000>;
+		reg-names = "tx-bram", "rx-bram";
+		tx-gpios = <&msix_gpio 0 0>;
+		rx-gpios = <&gic_gpio 0 0>;
+		interrupts = <0 106 4>;
+		interrupt-parent = <&gic>;
+		#mbox-cells = <1>;
+		mboxes = <&rave_mq 3>, <&rave_mq 2>, <&rave_mq 1>, <&rave_mq 0>;
+	};
+        
+};   
+
+// Set the CSI-2 RX to use YUV422 video format
+// This is DPHY 0 on IOB
+&vcap_pipe2_mipi_csi2_rx_subsyst_0 {
+	xlnx,csi-pxl-format = <0x1e>; //YUV
+        status = "okay";
+	video-reset-gpios = <&axi_gpio_rst 0xa 0x1>;
+        interrupts = <0xa 0x2>;
+	ports {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		port@0 {
+			reg = <0>;
+
+			xlnx,video-format = <0>;
+			xlnx,video-width = <8>;
+
+			csiss0_in: endpoint {
+				data-lanes = <1 2 3 4>;
+				remote-endpoint = <&dummy_src0_out>;
+			};
+		};
+		port@1 {
+			reg = <1>;
+
+			xlnx,video-format = <0>;
+			xlnx,video-width = <8>;
+
+			csiss0_out: endpoint {
+				remote-endpoint = <&switch0_in0>;
+			};
+		};
+	};
+
+};
+
+// SDT is not assign clock for some reason
+&vcap_pipe2_axis_switch_0 {
+	//compatible = "xlnx,dummy_switch-1.0"; // Dummy Option
+	clock-names = "aclk";
+	clocks = <&misc_clk_2>;
+	ports {
+	#address-cells = <1>;
+	#size-cells = <0>;
+		port@0 {
+			reg = <0>;
+			xlnx,video-format = <0>;
+			xlnx,video-width = <8>;
+			switch0_in0: endpoint {
+				remote-endpoint = <&csiss0_out>;
+			};
+		};
+		port@1 {
+			reg = <1>;
+			xlnx,video-format = <0>;
+			xlnx,video-width = <8>;
+			switch0_out0: endpoint {
+				remote-endpoint = <&vcap0_in0>;
+			};
+		};
+		port@2 {
+			reg = <2>;
+			xlnx,video-format = <0>;
+			xlnx,video-width = <8>;
+			switch0_out1: endpoint {
+				remote-endpoint = <&vcap0_in1>;
+			};
+		};
+                port@3 {
+			reg = <3>;
+			xlnx,video-format = <0>;
+			xlnx,video-width = <8>;
+			switch0_out2: endpoint {
+				remote-endpoint = <&vcap0_in2>;
+			};
+		};
+                port@4 {
+			reg = <4>;
+			xlnx,video-format = <0>;
+			xlnx,video-width = <8>;
+			switch0_out3: endpoint {
+				remote-endpoint = <&vcap0_in3>;
+			};
+		};
+	};
+
+};
+
+// TODO - Figure out why SDT is wrong for interrupts
+&vcap_pipe2_v_frmbuf_wr_0 {
+	interrupts = <0xb 0x2>;
+};
+
+&vcap_pipe2_v_frmbuf_wr_1 {
+	interrupts = <0xc 0x2>;
+};
+
+&vcap_pipe2_v_frmbuf_wr_2 {
+	interrupts = <0xd 0x2>;
+};
+
+&vcap_pipe2_v_frmbuf_wr_3 {
+	interrupts = <0xe 0x2>;
+};
+
+
+// Set the CSI-2 RX to use YUV422 video format
+// This is DPHY 1 on IOB
+&vcap_pipe3_mipi_csi2_rx_subsyst_0 {
+	xlnx,csi-pxl-format = <0x1e>; //YUV
+        status = "okay";
+	video-reset-gpios = <&axi_gpio_rst 0xf 0x1>;
+        interrupts = <0xf 0x2>;
+	ports {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		port@0 {
+			reg = <0>;
+
+			xlnx,video-format = <0>;
+			xlnx,video-width = <8>;
+
+			csiss1_in: endpoint {
+				data-lanes = <1 2 3 4>;
+				remote-endpoint = <&dummy_src1_out>;
+			};
+		};
+		port@1 {
+			reg = <1>;
+
+			xlnx,video-format = <0>;
+			xlnx,video-width = <8>;
+
+			csiss1_out: endpoint {
+				remote-endpoint = <&switch1_in0>;
+			};
+		};
+	};
+
+};
+
+// SDT is not assign clock for some reason
+&vcap_pipe3_axis_switch_0 {
+	//compatible = "xlnx,dummy_switch-1.0"; // Dummy Option
+	clock-names = "aclk";
+	clocks = <&misc_clk_2>;
+	ports {
+	#address-cells = <1>;
+	#size-cells = <0>;
+		port@0 {
+			reg = <0>;
+			xlnx,video-format = <0>;
+			xlnx,video-width = <8>;
+			switch1_in0: endpoint {
+				remote-endpoint = <&csiss1_out>;
+			};
+		};
+		port@1 {
+			reg = <1>;
+			xlnx,video-format = <0>;
+			xlnx,video-width = <8>;
+			switch1_out0: endpoint {
+				remote-endpoint = <&vcap1_in0>;
+			};
+		};
+		port@2 {
+			reg = <2>;
+			xlnx,video-format = <0>;
+			xlnx,video-width = <8>;
+			switch1_out1: endpoint {
+				remote-endpoint = <&vcap1_in1>;
+			};
+		};
+                port@3 {
+			reg = <3>;
+			xlnx,video-format = <0>;
+			xlnx,video-width = <8>;
+			switch1_out2: endpoint {
+				remote-endpoint = <&vcap1_in2>;
+			};
+		};
+                port@4 {
+			reg = <4>;
+			xlnx,video-format = <0>;
+			xlnx,video-width = <8>;
+			switch1_out3: endpoint {
+				remote-endpoint = <&vcap1_in3>;
+			};
+		};
+	};
+
+};
+
+// TPM module
+&spi1 {
+    status = "okay";
+
+    tpm@0 {
+        compatible = "tcg,tpm_tis-spi","infineon,slb9670";
+        reg = <0>;
+        mode = <0>;
+        spi-max-frequency = <32000000>;
+
+        status = "okay";
+    };
+};
+
+// TODO - Figure out why SDT is wrong for interrupts
+&vcap_pipe3_v_frmbuf_wr_0 {
+	interrupts = <0x10 0x2>;
+};
+
+&vcap_pipe3_v_frmbuf_wr_1 {
+	interrupts = <0x11 0x2>;
+};
+
+&vcap_pipe3_v_frmbuf_wr_2 {
+	interrupts = <0x12 0x2>;
+};
+
+&vcap_pipe3_v_frmbuf_wr_3 {
+	interrupts = <0x13 0x2>;
+};
+
+
+
+
+// Set the CSI-2 RX to use YUV422 video format
+// This is DPHY 2 on IOB
+&vcap_pipe1_mipi_csi2_rx_subsyst_0 {
+	xlnx,csi-pxl-format = <0x1e>; //YUV
+        status = "okay";
+	video-reset-gpios = <&axi_gpio_rst 0x5 0x1>;
+        interrupts = <0x3 0x2>;
+	ports {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		port@0 {
+			reg = <0>;
+
+			xlnx,video-format = <0>;
+			xlnx,video-width = <8>;
+
+			csiss2_in: endpoint {
+				data-lanes = <1 2 3 4>;
+				remote-endpoint = <&dummy_src2_out>;
+			};
+		};
+		port@1 {
+			reg = <1>;
+
+			xlnx,video-format = <0>;
+			xlnx,video-width = <8>;
+
+			csiss2_out: endpoint {
+				remote-endpoint = <&switch2_in0>;
+			};
+		};
+	};
+
+};
+
+// SDT is not assign clock for some reason
+&vcap_pipe1_axis_switch_0 {
+	//compatible = "xlnx,dummy_switch-1.0"; // Dummy Option
+	clock-names = "aclk";
+	clocks = <&misc_clk_2>;
+	ports {
+	#address-cells = <1>;
+	#size-cells = <0>;
+		port@0 {
+			reg = <0>;
+			xlnx,video-format = <0>;
+			xlnx,video-width = <8>;
+			switch2_in0: endpoint {
+				remote-endpoint = <&csiss2_out>;
+			};
+		};
+		port@1 {
+			reg = <1>;
+			xlnx,video-format = <0>;
+			xlnx,video-width = <8>;
+			switch2_out0: endpoint {
+				remote-endpoint = <&vcap2_in0>;
+			};
+		};
+		port@2 {
+			reg = <2>;
+			xlnx,video-format = <0>;
+			xlnx,video-width = <8>;
+			switch2_out1: endpoint {
+				remote-endpoint = <&vcap2_in1>;
+			};
+		};
+                port@3 {
+			reg = <3>;
+			xlnx,video-format = <0>;
+			xlnx,video-width = <8>;
+			switch2_out2: endpoint {
+				remote-endpoint = <&vcap2_in2>;
+			};
+		};
+                port@4 {
+			reg = <4>;
+			xlnx,video-format = <0>;
+			xlnx,video-width = <8>;
+			switch2_out3: endpoint {
+				remote-endpoint = <&vcap2_in3>;
+			};
+		};
+	};
+
+};
+
+// TODO - Figure out why SDT is wrong for interrupts
+&vcap_pipe1_v_frmbuf_wr_0 {
+	interrupts = <0x4 0x2>;
+};
+
+&vcap_pipe1_v_frmbuf_wr_1 {
+	interrupts = <0x5 0x2>;
+};
+
+&vcap_pipe1_v_frmbuf_wr_2 {
+	interrupts = <0x6 0x2>;
+};
+
+&vcap_pipe1_v_frmbuf_wr_3 {
+	interrupts = <0x7 0x2>;
+};
+
+
+
